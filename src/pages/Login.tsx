@@ -231,8 +231,17 @@ const Login = () => {
             </TabsContent>
           </Tabs>
           
-          <div className="text-center text-sm text-muted-foreground mt-6">
-            <span>Don't have an account? Contact your administrator.</span>
+          <div className="text-center mt-6 space-y-4">
+            <div className="text-sm text-muted-foreground">
+              <span>Don't have an account? </span>
+            </div>
+            <Button 
+              variant="outline" 
+              className="w-full"
+              onClick={() => navigate('/signup')}
+            >
+              Register as Voter or Candidate
+            </Button>
           </div>
         </Card>
       </main>
