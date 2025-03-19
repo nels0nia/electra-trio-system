@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -19,7 +18,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { format, addDays } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
-import { useMobile } from '@/hooks/use-mobile';
+import { useIsMobile } from '@/hooks/use-mobile';
 
 const electionSchema = z.object({
   title: z.string().min(3, { message: "Title must be at least 3 characters." }),
@@ -85,7 +84,7 @@ const mockElections = [
 ];
 
 const ElectionManagement = () => {
-  const isMobile = useMobile();
+  const isMobile = useIsMobile();
   const [activeTab, setActiveTab] = useState('upcoming');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
@@ -104,16 +103,12 @@ const ElectionManagement = () => {
   
   const onSubmit = async (data: ElectionFormData) => {
     try {
-      // Here we would send the data to our API
       console.log('Election form data:', data);
       
-      // Simulate API call
       await new Promise(resolve => setTimeout(resolve, 1000));
       
-      // Success message
       toast.success('Election created successfully!');
       
-      // Reset form and close dialog/drawer
       form.reset();
       setIsDialogOpen(false);
       setIsDrawerOpen(false);
@@ -591,3 +586,4 @@ const ElectionCard = ({ election }: ElectionCardProps) => {
 };
 
 export default ElectionManagement;
+
