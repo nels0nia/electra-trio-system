@@ -72,11 +72,42 @@ export class MongoService {
   }
   
   // User related methods
-  public async registerUser(userData: any) {
+  public async registerUser(userData: {
+    name: string;
+    email: string;
+    password: string;
+    role: 'voter' | 'candidate';
+    registeredAt: Date;
+  }) {
     await this.isReady();
-    // Here we would register a user in MongoDB
-    console.log('Registering user:', userData);
-    return { success: true, id: 'new-user-id' };
+    
+    try {
+      // Check if MongoDB is ready
+      if (!this.isConnected) {
+        throw new Error('Database connection not established');
+      }
+      
+      // In a real implementation, we would:
+      // 1. Check if user already exists
+      // 2. Hash the password (NEVER store plain text passwords)
+      // 3. Create the user document in the MongoDB collection
+      
+      console.log('Registering user:', userData);
+      
+      // Simulate API delay
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      // For demonstration, always return success
+      // In real implementation, return the actual result from MongoDB
+      return { 
+        success: true, 
+        id: `new-${userData.role}-id-${Date.now()}`,
+        role: userData.role 
+      };
+    } catch (error) {
+      console.error('Failed to register user:', error);
+      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+    }
   }
   
   // Vote related methods

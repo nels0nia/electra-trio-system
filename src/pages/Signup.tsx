@@ -6,15 +6,16 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
-import { Vote, Shield, User, Users } from 'lucide-react';
+import { Vote, User, Users } from 'lucide-react';
 import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
 import { toast } from 'sonner';
+import { mongoService } from '@/services/mongo';
+import { Checkbox } from '@/components/ui/checkbox';
 
 const signupSchema = z.object({
   name: z.string().min(2, { message: "Name must be at least 2 characters." }),
@@ -22,6 +23,9 @@ const signupSchema = z.object({
   password: z.string().min(6, { message: "Password must be at least 6 characters." }),
   confirmPassword: z.string(),
   role: z.enum(["voter", "candidate"]),
+  termsAccepted: z.boolean().refine(val => val === true, {
+    message: "You must accept the terms and conditions."
+  }),
 }).refine((data) => data.password === data.confirmPassword, {
   message: "Passwords don't match",
   path: ["confirmPassword"],
@@ -40,7 +44,8 @@ const Signup = () => {
       email: "",
       password: "",
       confirmPassword: "",
-      role: "voter"
+      role: "voter",
+      termsAccepted: false
     }
   });
   
@@ -48,19 +53,26 @@ const Signup = () => {
     setIsLoading(true);
     
     try {
-      // In a real implementation, this would call your API
-      console.log("Signup data:", data);
+      // Connect to MongoDB and register the user
+      const result = await mongoService.registerUser({
+        name: data.name,
+        email: data.email,
+        password: data.password, // In production, ensure this is handled securely
+        role: data.role,
+        registeredAt: new Date()
+      });
       
-      // Simulate API call delay
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      
-      toast.success(`Successfully registered as a ${data.role}!`);
-      
-      // Redirect based on role
-      if (data.role === "voter") {
-        navigate("/vote");
+      if (result.success) {
+        toast.success(`Successfully registered as a ${data.role}!`);
+        
+        // Redirect based on role
+        if (data.role === "voter") {
+          navigate("/vote");
+        } else {
+          navigate("/candidates");
+        }
       } else {
-        navigate("/results");
+        throw new Error("Registration failed");
       }
       
     } catch (error) {
@@ -174,6 +186,27 @@ const Signup = () => {
                       </RadioGroup>
                     </FormControl>
                     <FormMessage />
+                  </FormItem>
+                )}
+              />
+              
+              <FormField
+                control={form.control}
+                name="termsAccepted"
+                render={({ field }) => (
+                  <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-md p-4 border">
+                    <FormControl>
+                      <Checkbox
+                        checked={field.value}
+                        onCheckedChange={field.onChange}
+                      />
+                    </FormControl>
+                    <div className="space-y-1 leading-none">
+                      <FormLabel>
+                        I accept the terms and conditions
+                      </FormLabel>
+                      <FormMessage />
+                    </div>
                   </FormItem>
                 )}
               />
