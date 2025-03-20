@@ -14,7 +14,7 @@ import { Vote, User, Users } from 'lucide-react';
 import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
 import { toast } from 'sonner';
-import { mongoService } from '@/services/mongo';
+import { sqlService } from '@/services/sql';
 import { Checkbox } from '@/components/ui/checkbox';
 
 const signupSchema = z.object({
@@ -53,8 +53,8 @@ const Signup = () => {
     setIsLoading(true);
     
     try {
-      // Connect to MongoDB and register the user
-      const result = await mongoService.registerUser({
+      // Connect to SQL database and register the user
+      const result = await sqlService.registerUser({
         name: data.name,
         email: data.email,
         password: data.password, // In production, ensure this is handled securely

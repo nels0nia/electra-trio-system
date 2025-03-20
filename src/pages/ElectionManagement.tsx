@@ -19,6 +19,7 @@ import { format, addDays } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { sqlService } from '@/services/sql';
 
 const electionSchema = z.object({
   title: z.string().min(3, { message: "Title must be at least 3 characters." }),
@@ -105,13 +106,17 @@ const ElectionManagement = () => {
     try {
       console.log('Election form data:', data);
       
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      const result = await sqlService.createElection(data);
       
-      toast.success('Election created successfully!');
-      
-      form.reset();
-      setIsDialogOpen(false);
-      setIsDrawerOpen(false);
+      if (result.success) {
+        toast.success('Election created successfully!');
+        
+        form.reset();
+        setIsDialogOpen(false);
+        setIsDrawerOpen(false);
+      } else {
+        throw new Error('Failed to create election');
+      }
       
     } catch (error) {
       console.error('Error creating election:', error);
@@ -586,4 +591,3 @@ const ElectionCard = ({ election }: ElectionCardProps) => {
 };
 
 export default ElectionManagement;
-

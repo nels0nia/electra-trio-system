@@ -1,46 +1,58 @@
 
 import { toast } from 'sonner';
 
-// MongoDB connection and data service
-export class MongoService {
-  private static instance: MongoService;
+// SQL Database connection and data service
+export class SqlService {
+  private static instance: SqlService;
   private isConnected: boolean = false;
+  private connectionDetails: {
+    host: string;
+    port: number;
+    user: string;
+    password: string;
+    database: string;
+  };
 
   private constructor() {
     // Private constructor for singleton pattern
+    this.connectionDetails = {
+      host: import.meta.env.VITE_DB_HOST || 'localhost',
+      port: Number(import.meta.env.VITE_DB_PORT) || 3306,
+      user: import.meta.env.VITE_DB_USER || 'root',
+      password: import.meta.env.VITE_DB_PASSWORD || '',
+      database: import.meta.env.VITE_DB_NAME || 'votex',
+    };
     this.initConnection();
   }
 
-  public static getInstance(): MongoService {
-    if (!MongoService.instance) {
-      MongoService.instance = new MongoService();
+  public static getInstance(): SqlService {
+    if (!SqlService.instance) {
+      SqlService.instance = new SqlService();
     }
-    return MongoService.instance;
+    return SqlService.instance;
   }
 
   private async initConnection(): Promise<void> {
     try {
-      // In a real implementation, this would use the MongoDB driver
-      // Check if MongoDB connection string is available
-      const mongoUri = import.meta.env.VITE_MONGODB_URI;
-      
-      if (!mongoUri) {
-        console.error('MongoDB connection string not found. Please add VITE_MONGODB_URI to your environment variables.');
+      // Check if database connection details are available
+      if (!this.connectionDetails.host || !this.connectionDetails.database) {
+        console.error('Database connection details not found. Please check your environment variables.');
         toast.error('Database connection failed. Contact administrator.');
         return;
       }
       
-      // Here we would actually connect to MongoDB
-      console.log('Connecting to MongoDB...');
+      // In a real implementation, this would use a SQL connection library
+      // For this demo, we'll simulate the connection process
+      console.log('Connecting to MySQL database...');
       
       // Simulate connection process
       await new Promise(resolve => setTimeout(resolve, 1000));
       
       this.isConnected = true;
-      console.log('Connected to MongoDB');
+      console.log('Connected to MySQL database');
       
     } catch (error) {
-      console.error('Failed to connect to MongoDB:', error);
+      console.error('Failed to connect to database:', error);
       toast.error('Database connection failed. Please try again later.');
     }
   }
@@ -56,21 +68,6 @@ export class MongoService {
     return this.isConnected;
   }
   
-  // Election related methods
-  public async getElections() {
-    await this.isReady();
-    // Here we would fetch elections from MongoDB
-    // For now, returning mock data
-    return [];
-  }
-  
-  public async createElection(electionData: any) {
-    await this.isReady();
-    // Here we would create an election in MongoDB
-    console.log('Creating election:', electionData);
-    return { success: true, id: 'new-election-id' };
-  }
-  
   // User related methods
   public async registerUser(userData: {
     name: string;
@@ -82,23 +79,26 @@ export class MongoService {
     await this.isReady();
     
     try {
-      // Check if MongoDB is ready
+      // Check if SQL database is ready
       if (!this.isConnected) {
         throw new Error('Database connection not established');
       }
       
       // In a real implementation, we would:
-      // 1. Check if user already exists
-      // 2. Hash the password (NEVER store plain text passwords)
-      // 3. Create the user document in the MongoDB collection
+      // 1. Hash the password (NEVER store plain text passwords)
+      // 2. Check if user already exists using a SELECT query
+      // 3. Insert the user data using an INSERT query
       
-      console.log('Registering user:', userData);
+      console.log('Registering user in SQL database:', userData);
       
       // Simulate API delay
       await new Promise(resolve => setTimeout(resolve, 1000));
       
+      // SQL query would look something like:
+      // INSERT INTO users (name, email, password_hash, role, registered_at) 
+      // VALUES (?, ?, ?, ?, ?)
+      
       // For demonstration, always return success
-      // In real implementation, return the actual result from MongoDB
       return { 
         success: true, 
         id: `new-${userData.role}-id-${Date.now()}`,
@@ -110,23 +110,38 @@ export class MongoService {
     }
   }
   
+  // Election related methods
+  public async getElections() {
+    await this.isReady();
+    // Here we would fetch elections from database with SQL SELECT query
+    // For now, returning mock data
+    return [];
+  }
+  
+  public async createElection(electionData: any) {
+    await this.isReady();
+    // Here we would create an election in database with SQL INSERT query
+    console.log('Creating election in SQL database:', electionData);
+    return { success: true, id: 'new-election-id' };
+  }
+  
   // Vote related methods
   public async castVote(voteData: any) {
     await this.isReady();
-    // Here we would record a vote in MongoDB
-    console.log('Casting vote:', voteData);
+    // Here we would record a vote in database with SQL INSERT query
+    console.log('Casting vote in SQL database:', voteData);
     return { success: true, id: 'new-vote-id' };
   }
 }
 
-// Real-time data service (could use MongoDB Change Streams in a real implementation)
+// Real-time data service (using WebSockets or similar in a real implementation)
 export class RealTimeService {
   private static instance: RealTimeService;
   private listeners: Map<string, Set<Function>> = new Map();
   
   private constructor() {
     // Private constructor for singleton
-    this.setupChangeStream();
+    this.setupRealTimeUpdates();
   }
   
   public static getInstance(): RealTimeService {
@@ -136,8 +151,8 @@ export class RealTimeService {
     return RealTimeService.instance;
   }
   
-  private setupChangeStream() {
-    // In a real implementation, this would set up MongoDB Change Streams
+  private setupRealTimeUpdates() {
+    // In a real implementation, this would set up WebSockets or similar
     // For the demo, we'll simulate with periodic updates
     setInterval(() => {
       // Simulate vote updates
@@ -173,5 +188,5 @@ export class RealTimeService {
 }
 
 // Export singletons
-export const mongoService = MongoService.getInstance();
+export const sqlService = SqlService.getInstance();
 export const realTimeService = RealTimeService.getInstance();

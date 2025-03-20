@@ -12,7 +12,8 @@ This project is built with:
 - React - UI library
 - shadcn-ui - UI component library
 - Tailwind CSS - Utility-first CSS framework
-- MongoDB - NoSQL database for data storage
+- MySQL - Relational database for data storage
+- XAMPP - Local development environment
 
 ## Prerequisites
 
@@ -20,7 +21,7 @@ Before running this project, make sure you have:
 
 - Node.js (v18 or later)
 - npm or yarn package manager
-- MongoDB connection (local or Atlas)
+- XAMPP (or similar local server with MySQL)
 
 ## Getting Started
 
@@ -39,22 +40,36 @@ npm install
 yarn install
 ```
 
-### 3. Environment Setup
+### 3. Database Setup
+
+1. Start XAMPP and ensure MySQL service is running
+2. Create a new database named `votex`
+3. Import the SQL schema and sample data using the provided `database.sql` file:
+   - Open phpMyAdmin (usually at http://localhost/phpmyadmin)
+   - Select the `votex` database
+   - Go to the "Import" tab
+   - Choose the `database.sql` file and click "Go"
+
+### 4. Environment Setup
 
 Create a `.env` file in the project root with the following variables:
 
 ```
-# MongoDB Connection String
-VITE_MONGODB_URI=mongodb+srv://username:password@cluster.mongodb.net/votex?retryWrites=true&w=majority
+# Database Connection
+VITE_DB_HOST=localhost
+VITE_DB_PORT=3306
+VITE_DB_USER=root
+VITE_DB_PASSWORD=
+VITE_DB_NAME=votex
 
 # Application Settings
 VITE_APP_NAME=VoteX
 VITE_API_URL=http://localhost:4000/api
 ```
 
-**Important:** Replace the MongoDB connection string with your own MongoDB connection string.
+**Important:** Update the database connection details to match your XAMPP configuration.
 
-### 4. Run the development server
+### 5. Run the development server
 
 ```bash
 npm run dev
@@ -63,17 +78,6 @@ yarn dev
 ```
 
 The application will be available at http://localhost:8080
-
-## Database Setup
-
-To initialize your MongoDB database with sample data, you can use the provided `mongodb-seed.js` file:
-
-1. Ensure MongoDB is running and accessible
-2. Run the seed file using MongoDB's tools:
-
-```bash
-mongosh <your-connection-string> mongodb-seed.js
-```
 
 ## Features
 
