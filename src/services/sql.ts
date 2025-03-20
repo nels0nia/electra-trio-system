@@ -9,11 +9,13 @@ export class SqlService {
   private static instance: SqlService;
   private isConnected: boolean = false;
   private token: string | null = null;
+  private currentUser: any = null;
 
   private constructor() {
     // Private constructor for singleton pattern
     this.token = localStorage.getItem('token');
     this.initConnection();
+    this.loadCurrentUser();
   }
 
   public static getInstance(): SqlService {
@@ -48,6 +50,22 @@ export class SqlService {
     }
   }
 
+  private loadCurrentUser() {
+    const userJson = localStorage.getItem('user');
+    if (userJson) {
+      try {
+        this.currentUser = JSON.parse(userJson);
+      } catch (e) {
+        console.error('Failed to parse user data:', e);
+        this.currentUser = null;
+      }
+    }
+  }
+
+  public getCurrentUser() {
+    return this.currentUser;
+  }
+
   public async isReady(): Promise<boolean> {
     if (!this.isConnected) {
       try {
@@ -59,16 +77,20 @@ export class SqlService {
     return this.isConnected;
   }
   
-  // Set auth token
-  public setToken(token: string): void {
+  // Set auth token and user
+  public setTokenAndUser(token: string, user: any): void {
     this.token = token;
+    this.currentUser = user;
     localStorage.setItem('token', token);
+    localStorage.setItem('user', JSON.stringify(user));
   }
   
   // Clear auth token
   public clearToken(): void {
     this.token = null;
+    this.currentUser = null;
     localStorage.removeItem('token');
+    localStorage.removeItem('user');
   }
   
   // Get auth headers
@@ -90,7 +112,6 @@ export class SqlService {
     email: string;
     password: string;
     role: 'voter' | 'candidate' | 'admin';
-    registeredAt: Date;
   }) {
     await this.isReady();
     
@@ -108,7 +129,7 @@ export class SqlService {
       }
       
       if (data.token) {
-        this.setToken(data.token);
+        this.setTokenAndUser(data.token, data.user);
       }
       
       return { 
@@ -143,7 +164,7 @@ export class SqlService {
       }
       
       if (data.token) {
-        this.setToken(data.token);
+        this.setTokenAndUser(data.token, data.user);
       }
       
       return { 
@@ -152,6 +173,86 @@ export class SqlService {
       };
     } catch (error) {
       console.error('Failed to login:', error);
+      return { 
+        success: false, 
+        error: error instanceof Error ? error.message : 'Unknown error' 
+      };
+    }
+  }
+
+  // Admin: Get all users
+  public async getUsers(role?: 'voter' | 'candidate' | 'admin') {
+    await this.isReady();
+    
+    try {
+      let url = `${API_URL}/users`;
+      if (role) {
+        url += `?role=${role}`;
+      }
+      
+      const response = await fetch(url, {
+        headers: this.getHeaders()
+      });
+      
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.message || 'Failed to fetch users');
+      }
+      
+      return data.users;
+    } catch (error) {
+      console.error('Failed to fetch users:', error);
+      throw error;
+    }
+  }
+
+  // Admin: Update user
+  public async updateUser(userId: number, userData: any) {
+    await this.isReady();
+    
+    try {
+      const response = await fetch(`${API_URL}/users/${userId}`, {
+        method: 'PUT',
+        headers: this.getHeaders(),
+        body: JSON.stringify(userData)
+      });
+      
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.message || 'Failed to update user');
+      }
+      
+      return { success: true };
+    } catch (error) {
+      console.error('Failed to update user:', error);
+      return { 
+        success: false, 
+        error: error instanceof Error ? error.message : 'Unknown error' 
+      };
+    }
+  }
+
+  // Admin: Delete user
+  public async deleteUser(userId: number) {
+    await this.isReady();
+    
+    try {
+      const response = await fetch(`${API_URL}/users/${userId}`, {
+        method: 'DELETE',
+        headers: this.getHeaders()
+      });
+      
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.message || 'Failed to delete user');
+      }
+      
+      return { success: true };
+    } catch (error) {
+      console.error('Failed to delete user:', error);
       return { 
         success: false, 
         error: error instanceof Error ? error.message : 'Unknown error' 
@@ -209,6 +310,59 @@ export class SqlService {
       };
     }
   }
+
+  // Admin: Update election
+  public async updateElection(electionId: number, electionData: any) {
+    await this.isReady();
+    
+    try {
+      const response = await fetch(`${API_URL}/elections/${electionId}`, {
+        method: 'PUT',
+        headers: this.getHeaders(),
+        body: JSON.stringify(electionData)
+      });
+      
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.message || 'Failed to update election');
+      }
+      
+      return { success: true };
+    } catch (error) {
+      console.error('Failed to update election:', error);
+      return { 
+        success: false, 
+        error: error instanceof Error ? error.message : 'Unknown error' 
+      };
+    }
+  }
+
+  // Admin: Delete election
+  public async deleteElection(electionId: number) {
+    await this.isReady();
+    
+    try {
+      const response = await fetch(`${API_URL}/elections/${electionId}`, {
+        method: 'DELETE',
+        headers: this.getHeaders()
+      });
+      
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.message || 'Failed to delete election');
+      }
+      
+      return { success: true };
+    } catch (error) {
+      console.error('Failed to delete election:', error);
+      return { 
+        success: false, 
+        error: error instanceof Error ? error.message : 'Unknown error' 
+      };
+    }
+  }
   
   // Candidate related methods
   public async getCandidates(electionId?: number) {
@@ -234,6 +388,94 @@ export class SqlService {
     } catch (error) {
       console.error('Failed to fetch candidates:', error);
       throw error;
+    }
+  }
+
+  // Admin: Create candidate
+  public async createCandidate(candidateData: {
+    userId: number;
+    electionId: number;
+    party: string;
+    platform: string;
+  }) {
+    await this.isReady();
+    
+    try {
+      const response = await fetch(`${API_URL}/candidates`, {
+        method: 'POST',
+        headers: this.getHeaders(),
+        body: JSON.stringify(candidateData)
+      });
+      
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.message || 'Failed to create candidate');
+      }
+      
+      return { 
+        success: true, 
+        id: data.candidateId 
+      };
+    } catch (error) {
+      console.error('Failed to create candidate:', error);
+      return { 
+        success: false, 
+        error: error instanceof Error ? error.message : 'Unknown error' 
+      };
+    }
+  }
+
+  // Admin: Update candidate
+  public async updateCandidate(candidateId: number, candidateData: any) {
+    await this.isReady();
+    
+    try {
+      const response = await fetch(`${API_URL}/candidates/${candidateId}`, {
+        method: 'PUT',
+        headers: this.getHeaders(),
+        body: JSON.stringify(candidateData)
+      });
+      
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.message || 'Failed to update candidate');
+      }
+      
+      return { success: true };
+    } catch (error) {
+      console.error('Failed to update candidate:', error);
+      return { 
+        success: false, 
+        error: error instanceof Error ? error.message : 'Unknown error' 
+      };
+    }
+  }
+
+  // Admin: Delete candidate
+  public async deleteCandidate(candidateId: number) {
+    await this.isReady();
+    
+    try {
+      const response = await fetch(`${API_URL}/candidates/${candidateId}`, {
+        method: 'DELETE',
+        headers: this.getHeaders()
+      });
+      
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.message || 'Failed to delete candidate');
+      }
+      
+      return { success: true };
+    } catch (error) {
+      console.error('Failed to delete candidate:', error);
+      return { 
+        success: false, 
+        error: error instanceof Error ? error.message : 'Unknown error' 
+      };
     }
   }
   

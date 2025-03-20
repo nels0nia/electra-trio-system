@@ -1,9 +1,9 @@
-
 const express = require('express');
 const cors = require('cors');
 const mysql = require('mysql2/promise');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
+const crypto = require('crypto');
 require('dotenv').config();
 
 const app = express();
@@ -12,6 +12,29 @@ const PORT = process.env.PORT || 4000;
 // Middleware
 app.use(cors());
 app.use(express.json());
+
+// Encryption key (in a real app, store this securely)
+const ENCRYPTION_KEY = process.env.ENCRYPTION_KEY || 'your-encryption-key-min-32-chars-here!!';
+const IV_LENGTH = 16; // For AES, this is always 16
+
+// Encryption functions
+function encrypt(text) {
+  const iv = crypto.randomBytes(IV_LENGTH);
+  const cipher = crypto.createCipheriv('aes-256-cbc', Buffer.from(ENCRYPTION_KEY), iv);
+  let encrypted = cipher.update(text);
+  encrypted = Buffer.concat([encrypted, cipher.final()]);
+  return iv.toString('hex') + ':' + encrypted.toString('hex');
+}
+
+function decrypt(text) {
+  const textParts = text.split(':');
+  const iv = Buffer.from(textParts.shift(), 'hex');
+  const encryptedText = Buffer.from(textParts.join(':'), 'hex');
+  const decipher = crypto.createDecipheriv('aes-256-cbc', Buffer.from(ENCRYPTION_KEY), iv);
+  let decrypted = decipher.update(encryptedText);
+  decrypted = Buffer.concat([decrypted, decipher.final()]);
+  return decrypted.toString();
+}
 
 // Database connection pool
 const pool = mysql.createPool({
@@ -23,6 +46,28 @@ const pool = mysql.createPool({
   connectionLimit: 10,
   queueLimit: 0
 });
+
+// Authentication middleware
+const authenticateToken = (req, res, next) => {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
+  
+  if (!token) return res.status(401).json({ success: false, message: 'Authentication required' });
+  
+  jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
+    if (err) return res.status(403).json({ success: false, message: 'Invalid or expired token' });
+    req.user = user;
+    next();
+  });
+};
+
+// Admin authorization middleware
+const authorizeAdmin = (req, res, next) => {
+  if (req.user.role !== 'admin') {
+    return res.status(403).json({ success: false, message: 'Requires admin privileges' });
+  }
+  next();
+};
 
 // Test database connection
 app.get('/api/test-connection', async (req, res) => {
@@ -142,6 +187,94 @@ app.post('/api/users/login', async (req, res) => {
   }
 });
 
+// Get Users (Admin only)
+app.get('/api/users', authenticateToken, authorizeAdmin, async (req, res) => {
+  try {
+    const { role } = req.query;
+    
+    let query = 'SELECT id, name, email, role, registered_at, profile_image, bio FROM users';
+    const queryParams = [];
+    
+    if (role && ['voter', 'candidate', 'admin'].includes(role)) {
+      query += ' WHERE role = ?';
+      queryParams.push(role);
+    }
+    
+    const [users] = await pool.query(query, queryParams);
+    
+    res.json({ success: true, users });
+  } catch (error) {
+    console.error('Error fetching users:', error);
+    res.status(500).json({ success: false, message: 'Failed to fetch users', error: error.message });
+  }
+});
+
+// Get User by ID (Admin only)
+app.get('/api/users/:id', authenticateToken, authorizeAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    const [users] = await pool.query(
+      'SELECT id, name, email, role, registered_at, profile_image, bio FROM users WHERE id = ?',
+      [id]
+    );
+    
+    if (users.length === 0) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+    
+    res.json({ success: true, user: users[0] });
+  } catch (error) {
+    console.error('Error fetching user:', error);
+    res.status(500).json({ success: false, message: 'Failed to fetch user', error: error.message });
+  }
+});
+
+// Update User (Admin only)
+app.put('/api/users/:id', authenticateToken, authorizeAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name, email, role, bio, profile_image } = req.body;
+    
+    // Validate input
+    if (!name || !email || !role) {
+      return res.status(400).json({ success: false, message: 'Required fields missing' });
+    }
+    
+    const [result] = await pool.query(
+      'UPDATE users SET name = ?, email = ?, role = ?, bio = ?, profile_image = ? WHERE id = ?',
+      [name, email, role, bio, profile_image, id]
+    );
+    
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+    
+    res.json({ success: true, message: 'User updated successfully' });
+  } catch (error) {
+    console.error('Error updating user:', error);
+    res.status(500).json({ success: false, message: 'Failed to update user', error: error.message });
+  }
+});
+
+// Delete User (Admin only)
+app.delete('/api/users/:id', authenticateToken, authorizeAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    const [result] = await pool.query('DELETE FROM users WHERE id = ?', [id]);
+    
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+    
+    res.json({ success: true, message: 'User deleted successfully' });
+  } catch (error) {
+    console.error('Error deleting user:', error);
+    res.status(500).json({ success: false, message: 'Failed to delete user', error: error.message });
+  }
+});
+
 // Get Elections
 app.get('/api/elections', async (req, res) => {
   try {
@@ -188,6 +321,51 @@ app.post('/api/elections', async (req, res) => {
   }
 });
 
+// Update Election (Admin only)
+app.put('/api/elections/:id', authenticateToken, authorizeAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { title, description, startDate, endDate, status } = req.body;
+    
+    // Validate input
+    if (!title || !startDate || !endDate || !status) {
+      return res.status(400).json({ success: false, message: 'Required fields missing' });
+    }
+    
+    const [result] = await pool.query(
+      'UPDATE elections SET title = ?, description = ?, start_date = ?, end_date = ?, status = ?, updated_at = NOW() WHERE id = ?',
+      [title, description, startDate, endDate, status, id]
+    );
+    
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ success: false, message: 'Election not found' });
+    }
+    
+    res.json({ success: true, message: 'Election updated successfully' });
+  } catch (error) {
+    console.error('Error updating election:', error);
+    res.status(500).json({ success: false, message: 'Failed to update election', error: error.message });
+  }
+});
+
+// Delete Election (Admin only)
+app.delete('/api/elections/:id', authenticateToken, authorizeAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    const [result] = await pool.query('DELETE FROM elections WHERE id = ?', [id]);
+    
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ success: false, message: 'Election not found' });
+    }
+    
+    res.json({ success: true, message: 'Election deleted successfully' });
+  } catch (error) {
+    console.error('Error deleting election:', error);
+    res.status(500).json({ success: false, message: 'Failed to delete election', error: error.message });
+  }
+});
+
 // Get Candidates
 app.get('/api/candidates', async (req, res) => {
   try {
@@ -214,14 +392,99 @@ app.get('/api/candidates', async (req, res) => {
   }
 });
 
-// Cast Vote
-app.post('/api/votes', async (req, res) => {
+// Create Candidate (Admin only)
+app.post('/api/candidates', authenticateToken, authorizeAdmin, async (req, res) => {
+  try {
+    const { userId, electionId, party, platform } = req.body;
+    
+    // Input validation
+    if (!userId || !electionId) {
+      return res.status(400).json({ success: false, message: 'Required fields missing' });
+    }
+    
+    // Check if user exists and is a candidate
+    const [users] = await pool.query('SELECT role FROM users WHERE id = ?', [userId]);
+    
+    if (users.length === 0) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+    
+    // Update user role to candidate if not already
+    if (users[0].role !== 'candidate') {
+      await pool.query('UPDATE users SET role = "candidate" WHERE id = ?', [userId]);
+    }
+    
+    // Insert candidate
+    const [result] = await pool.query(
+      'INSERT INTO candidates (user_id, election_id, party, platform, approved) VALUES (?, ?, ?, ?, TRUE)',
+      [userId, electionId, party, platform]
+    );
+    
+    res.status(201).json({
+      success: true,
+      message: 'Candidate created successfully',
+      candidateId: result.insertId
+    });
+    
+  } catch (error) {
+    console.error('Error creating candidate:', error);
+    res.status(500).json({ success: false, message: 'Failed to create candidate', error: error.message });
+  }
+});
+
+// Update Candidate (Admin only)
+app.put('/api/candidates/:id', authenticateToken, authorizeAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { party, platform, approved } = req.body;
+    
+    const [result] = await pool.query(
+      'UPDATE candidates SET party = ?, platform = ?, approved = ? WHERE id = ?',
+      [party, platform, approved, id]
+    );
+    
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ success: false, message: 'Candidate not found' });
+    }
+    
+    res.json({ success: true, message: 'Candidate updated successfully' });
+  } catch (error) {
+    console.error('Error updating candidate:', error);
+    res.status(500).json({ success: false, message: 'Failed to update candidate', error: error.message });
+  }
+});
+
+// Delete Candidate (Admin only)
+app.delete('/api/candidates/:id', authenticateToken, authorizeAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    const [result] = await pool.query('DELETE FROM candidates WHERE id = ?', [id]);
+    
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ success: false, message: 'Candidate not found' });
+    }
+    
+    res.json({ success: true, message: 'Candidate deleted successfully' });
+  } catch (error) {
+    console.error('Error deleting candidate:', error);
+    res.status(500).json({ success: false, message: 'Failed to delete candidate', error: error.message });
+  }
+});
+
+// Cast Vote with encryption
+app.post('/api/votes', authenticateToken, async (req, res) => {
   try {
     const { voterId, candidateId, electionId } = req.body;
     
     // Input validation
     if (!voterId || !candidateId || !electionId) {
       return res.status(400).json({ success: false, message: 'Required fields missing' });
+    }
+    
+    // Ensure user is a voter
+    if (req.user.role !== 'voter' && req.user.id !== voterId) {
+      return res.status(403).json({ success: false, message: 'Only voters can cast votes' });
     }
     
     // Check if voter has already voted in this election
@@ -234,10 +497,13 @@ app.post('/api/votes', async (req, res) => {
       return res.status(409).json({ success: false, message: 'You have already voted in this election' });
     }
     
-    // Record the vote
+    // Encrypt the candidateId before storing
+    const encryptedCandidateId = encrypt(candidateId.toString());
+    
+    // Record the vote with encryption
     const [result] = await pool.query(
       'INSERT INTO votes (voter_id, candidate_id, election_id, timestamp) VALUES (?, ?, ?, NOW())',
-      [voterId, candidateId, electionId]
+      [voterId, encryptedCandidateId, electionId]
     );
     
     res.status(201).json({
@@ -252,20 +518,54 @@ app.post('/api/votes', async (req, res) => {
   }
 });
 
-// Get Election Results
+// Get Election Results with decryption
 app.get('/api/results/:electionId', async (req, res) => {
   try {
     const { electionId } = req.params;
     
-    const [results] = await pool.query(`
-      SELECT c.id as candidate_id, u.name as candidate_name, c.party, COUNT(v.id) as vote_count
+    // Get all votes for this election
+    const [encryptedVotes] = await pool.query(
+      'SELECT v.id, v.voter_id, v.candidate_id, v.election_id FROM votes v WHERE v.election_id = ?',
+      [electionId]
+    );
+    
+    // Decrypt the votes and count them
+    const decryptedVotes = encryptedVotes.map(vote => {
+      try {
+        const decryptedId = decrypt(vote.candidate_id);
+        return { ...vote, candidateId: parseInt(decryptedId) };
+      } catch (error) {
+        console.error('Error decrypting vote:', error);
+        return null;
+      }
+    }).filter(vote => vote !== null);
+    
+    // Count votes by candidate
+    const voteCounts = {};
+    decryptedVotes.forEach(vote => {
+      const id = vote.candidateId;
+      voteCounts[id] = (voteCounts[id] || 0) + 1;
+    });
+    
+    // Get candidate information
+    const [candidates] = await pool.query(`
+      SELECT c.id, u.name, c.party, u.bio 
       FROM candidates c
       JOIN users u ON c.user_id = u.id
-      LEFT JOIN votes v ON v.candidate_id = c.id
       WHERE c.election_id = ?
-      GROUP BY c.id
-      ORDER BY vote_count DESC
     `, [electionId]);
+    
+    // Format the results
+    const results = candidates.map(candidate => ({
+      candidate_id: candidate.id,
+      candidate_name: candidate.name,
+      party: candidate.party,
+      bio: candidate.bio,
+      vote_count: voteCounts[candidate.id] || 0
+    }));
+    
+    // Sort by vote count
+    results.sort((a, b) => b.vote_count - a.vote_count);
     
     res.json({ success: true, results });
     

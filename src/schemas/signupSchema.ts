@@ -6,7 +6,7 @@ export const signupSchema = z.object({
   email: z.string().email({ message: "Please enter a valid email address." }),
   password: z.string().min(6, { message: "Password must be at least 6 characters." }),
   confirmPassword: z.string(),
-  role: z.enum(["voter", "candidate"]),
+  role: z.enum(["voter", "candidate", "admin"]),
   termsAccepted: z.boolean().refine(val => val === true, {
     message: "You must accept the terms and conditions."
   }),
