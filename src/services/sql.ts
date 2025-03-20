@@ -1,27 +1,18 @@
 
 import { toast } from 'sonner';
 
-// SQL Database connection and data service
+// API URL from env variables
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000/api';
+
+// SQL Database service using backend API
 export class SqlService {
   private static instance: SqlService;
   private isConnected: boolean = false;
-  private connectionDetails: {
-    host: string;
-    port: number;
-    user: string;
-    password: string;
-    database: string;
-  };
+  private token: string | null = null;
 
   private constructor() {
     // Private constructor for singleton pattern
-    this.connectionDetails = {
-      host: import.meta.env.VITE_DB_HOST || 'localhost',
-      port: Number(import.meta.env.VITE_DB_PORT) || 3306,
-      user: import.meta.env.VITE_DB_USER || 'root',
-      password: import.meta.env.VITE_DB_PASSWORD || '',
-      database: import.meta.env.VITE_DB_NAME || 'votex',
-    };
+    this.token = localStorage.getItem('token');
     this.initConnection();
   }
 
@@ -34,26 +25,26 @@ export class SqlService {
 
   private async initConnection(): Promise<void> {
     try {
-      // Check if database connection details are available
-      if (!this.connectionDetails.host || !this.connectionDetails.database) {
-        console.error('Database connection details not found. Please check your environment variables.');
-        toast.error('Database connection failed. Contact administrator.');
-        return;
+      console.log('Testing connection to backend API...');
+      const response = await fetch(`${API_URL}/test-connection`);
+      
+      if (!response.ok) {
+        throw new Error('Backend API connection failed');
       }
       
-      // In a real implementation, this would use a SQL connection library
-      // For this demo, we'll simulate the connection process
-      console.log('Connecting to MySQL database...');
+      const data = await response.json();
       
-      // Simulate connection process
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      this.isConnected = true;
-      console.log('Connected to MySQL database');
+      if (data.success) {
+        this.isConnected = true;
+        console.log('Connected to backend API');
+      } else {
+        throw new Error(data.message || 'Connection failed');
+      }
       
     } catch (error) {
-      console.error('Failed to connect to database:', error);
-      toast.error('Database connection failed. Please try again later.');
+      console.error('Failed to connect to backend API:', error);
+      toast.error('Database connection failed. Please ensure the backend server is running.');
+      this.isConnected = false;
     }
   }
 
@@ -68,69 +59,238 @@ export class SqlService {
     return this.isConnected;
   }
   
+  // Set auth token
+  public setToken(token: string): void {
+    this.token = token;
+    localStorage.setItem('token', token);
+  }
+  
+  // Clear auth token
+  public clearToken(): void {
+    this.token = null;
+    localStorage.removeItem('token');
+  }
+  
+  // Get auth headers
+  private getHeaders(): HeadersInit {
+    const headers: HeadersInit = {
+      'Content-Type': 'application/json'
+    };
+    
+    if (this.token) {
+      headers['Authorization'] = `Bearer ${this.token}`;
+    }
+    
+    return headers;
+  }
+  
   // User related methods
   public async registerUser(userData: {
     name: string;
     email: string;
     password: string;
-    role: 'voter' | 'candidate';
+    role: 'voter' | 'candidate' | 'admin';
     registeredAt: Date;
   }) {
     await this.isReady();
     
     try {
-      // Check if SQL database is ready
-      if (!this.isConnected) {
-        throw new Error('Database connection not established');
+      const response = await fetch(`${API_URL}/users/register`, {
+        method: 'POST',
+        headers: this.getHeaders(),
+        body: JSON.stringify(userData)
+      });
+      
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.message || 'Registration failed');
       }
       
-      // In a real implementation, we would:
-      // 1. Hash the password (NEVER store plain text passwords)
-      // 2. Check if user already exists using a SELECT query
-      // 3. Insert the user data using an INSERT query
+      if (data.token) {
+        this.setToken(data.token);
+      }
       
-      console.log('Registering user in SQL database:', userData);
-      
-      // Simulate API delay
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      // SQL query would look something like:
-      // INSERT INTO users (name, email, password_hash, role, registered_at) 
-      // VALUES (?, ?, ?, ?, ?)
-      
-      // For demonstration, always return success
       return { 
         success: true, 
-        id: `new-${userData.role}-id-${Date.now()}`,
-        role: userData.role 
+        id: data.user.id,
+        role: data.user.role 
       };
     } catch (error) {
       console.error('Failed to register user:', error);
-      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+      return { 
+        success: false, 
+        error: error instanceof Error ? error.message : 'Unknown error' 
+      };
+    }
+  }
+  
+  // Login user
+  public async loginUser(credentials: { email: string; password: string }) {
+    await this.isReady();
+    
+    try {
+      const response = await fetch(`${API_URL}/users/login`, {
+        method: 'POST',
+        headers: this.getHeaders(),
+        body: JSON.stringify(credentials)
+      });
+      
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.message || 'Login failed');
+      }
+      
+      if (data.token) {
+        this.setToken(data.token);
+      }
+      
+      return { 
+        success: true, 
+        user: data.user 
+      };
+    } catch (error) {
+      console.error('Failed to login:', error);
+      return { 
+        success: false, 
+        error: error instanceof Error ? error.message : 'Unknown error' 
+      };
     }
   }
   
   // Election related methods
   public async getElections() {
     await this.isReady();
-    // Here we would fetch elections from database with SQL SELECT query
-    // For now, returning mock data
-    return [];
+    
+    try {
+      const response = await fetch(`${API_URL}/elections`, {
+        headers: this.getHeaders()
+      });
+      
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.message || 'Failed to fetch elections');
+      }
+      
+      return data.elections;
+    } catch (error) {
+      console.error('Failed to fetch elections:', error);
+      throw error;
+    }
   }
   
   public async createElection(electionData: any) {
     await this.isReady();
-    // Here we would create an election in database with SQL INSERT query
-    console.log('Creating election in SQL database:', electionData);
-    return { success: true, id: 'new-election-id' };
+    
+    try {
+      const response = await fetch(`${API_URL}/elections`, {
+        method: 'POST',
+        headers: this.getHeaders(),
+        body: JSON.stringify(electionData)
+      });
+      
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.message || 'Failed to create election');
+      }
+      
+      return { 
+        success: true, 
+        id: data.electionId 
+      };
+    } catch (error) {
+      console.error('Failed to create election:', error);
+      return { 
+        success: false, 
+        error: error instanceof Error ? error.message : 'Unknown error' 
+      };
+    }
+  }
+  
+  // Candidate related methods
+  public async getCandidates(electionId?: number) {
+    await this.isReady();
+    
+    try {
+      let url = `${API_URL}/candidates`;
+      if (electionId) {
+        url += `?electionId=${electionId}`;
+      }
+      
+      const response = await fetch(url, {
+        headers: this.getHeaders()
+      });
+      
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.message || 'Failed to fetch candidates');
+      }
+      
+      return data.candidates;
+    } catch (error) {
+      console.error('Failed to fetch candidates:', error);
+      throw error;
+    }
   }
   
   // Vote related methods
-  public async castVote(voteData: any) {
+  public async castVote(voteData: {
+    voterId: number;
+    candidateId: number;
+    electionId: number;
+  }) {
     await this.isReady();
-    // Here we would record a vote in database with SQL INSERT query
-    console.log('Casting vote in SQL database:', voteData);
-    return { success: true, id: 'new-vote-id' };
+    
+    try {
+      const response = await fetch(`${API_URL}/votes`, {
+        method: 'POST',
+        headers: this.getHeaders(),
+        body: JSON.stringify(voteData)
+      });
+      
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.message || 'Failed to cast vote');
+      }
+      
+      return { 
+        success: true, 
+        id: data.voteId 
+      };
+    } catch (error) {
+      console.error('Failed to cast vote:', error);
+      return { 
+        success: false, 
+        error: error instanceof Error ? error.message : 'Unknown error' 
+      };
+    }
+  }
+  
+  // Get election results
+  public async getElectionResults(electionId: number) {
+    await this.isReady();
+    
+    try {
+      const response = await fetch(`${API_URL}/results/${electionId}`, {
+        headers: this.getHeaders()
+      });
+      
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.message || 'Failed to fetch results');
+      }
+      
+      return data.results;
+    } catch (error) {
+      console.error('Failed to fetch election results:', error);
+      throw error;
+    }
   }
 }
 

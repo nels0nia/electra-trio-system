@@ -12,6 +12,7 @@ This project is built with:
 - React - UI library
 - shadcn-ui - UI component library
 - Tailwind CSS - Utility-first CSS framework
+- Node.js & Express - Backend API
 - MySQL - Relational database for data storage
 - XAMPP - Local development environment
 
@@ -35,9 +36,13 @@ cd votex
 ### 2. Install dependencies
 
 ```bash
+# Install frontend dependencies
 npm install
-# or
-yarn install
+
+# Install backend dependencies
+cd backend
+npm install
+cd ..
 ```
 
 ### 3. Database Setup
@@ -52,7 +57,7 @@ yarn install
 
 ### 4. Environment Setup
 
-Create a `.env` file in the project root with the following variables:
+Create a `.env` file in the project root for the frontend:
 
 ```
 # Database Connection
@@ -67,17 +72,40 @@ VITE_APP_NAME=VoteX
 VITE_API_URL=http://localhost:4000/api
 ```
 
-**Important:** Update the database connection details to match your XAMPP configuration.
+Create a `.env` file in the backend directory for the backend:
 
-### 5. Run the development server
+```
+# Database Configuration
+DB_HOST=localhost
+DB_PORT=3306
+DB_USER=root
+DB_PASSWORD=
+DB_NAME=votex
 
-```bash
-npm run dev
-# or
-yarn dev
+# Server Configuration
+PORT=4000
+JWT_SECRET=your_jwt_secret_key_change_this_in_production
 ```
 
-The application will be available at http://localhost:8080
+**Important:** Update the database connection details to match your XAMPP configuration.
+
+### 5. Start the backend server
+
+```bash
+cd backend
+npm run dev
+```
+
+The backend API will be available at http://localhost:4000
+
+### 6. Run the frontend development server
+
+```bash
+# In a new terminal window
+npm run dev
+```
+
+The frontend application will be available at http://localhost:5173 (or another port if 5173 is in use)
 
 ## Features
 
@@ -89,21 +117,27 @@ The application will be available at http://localhost:8080
 
 ## Project Structure
 
-- `/src` - Source code
+- `/src` - Frontend source code
   - `/components` - Reusable UI components
   - `/pages` - Application pages/routes
   - `/services` - Services for data handling
   - `/hooks` - Custom React hooks
   - `/lib` - Utility functions
+- `/backend` - Backend API
+  - `server.js` - Express server and API endpoints
+  - `.env` - Backend environment configuration
 
 ## Deployment
 
 To build the project for production:
 
 ```bash
+# Build frontend
 npm run build
-# or
-yarn build
+
+# Prepare backend for production
+cd backend
+npm install --production
 ```
 
 ## License
