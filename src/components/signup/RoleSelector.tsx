@@ -4,9 +4,11 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Label } from '@/components/ui/label';
 import { User, Users } from 'lucide-react';
 
+type RoleType = "voter" | "candidate" | "admin";
+
 interface RoleSelectorProps {
-  value: string;
-  onChange: (value: string) => void;
+  value: RoleType;
+  onChange: (value: RoleType) => void;
 }
 
 const RoleSelector: React.FC<RoleSelectorProps> = ({ value, onChange }) => {

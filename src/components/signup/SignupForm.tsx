@@ -112,7 +112,7 @@ const SignupForm = () => {
 
       <RoleSelector
         value={form.watch('role')}
-        onChange={(value) => form.setValue('role', value)}
+        onChange={(value) => form.setValue('role', value, { shouldValidate: true })}
       />
 
       <div className="flex items-center space-x-2">
