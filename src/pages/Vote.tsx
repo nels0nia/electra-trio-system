@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card } from '@/components/ui/card';
@@ -9,6 +8,7 @@ import VoteCard from '@/components/VoteCard';
 import { Calendar, Vote as VoteIcon, CheckCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { sqlService } from '@/services/sql';
+import { encryptVote } from '@/utils/cryptoUtils';
 
 const Vote = () => {
   const navigate = useNavigate();
@@ -19,7 +19,6 @@ const Vote = () => {
   const [candidates, setCandidates] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   
-  // Check if user is voter or candidate, redirect if not
   useEffect(() => {
     const currentUser = sqlService.getCurrentUser();
     if (!currentUser || (currentUser.role !== 'voter' && currentUser.role !== 'candidate')) {
@@ -64,7 +63,7 @@ const Vote = () => {
     try {
       const userVotes = await sqlService.getUserVotes();
       if (userVotes) {
-        const electionIds = userVotes.map(vote => vote.election_id);
+        const electionIds = userVotes.map(vote => vote.election_id.toString());
         setCompletedElections(electionIds);
       }
     } catch (error) {
@@ -72,14 +71,23 @@ const Vote = () => {
     }
   };
   
-  const handleVote = async (electionId: string, candidateId: string, encryptedVote: string) => {
+  const handleVote = async (electionId: string, candidateId: string) => {
     try {
-      // Submit encrypted vote to the server
-      const result = await sqlService.castVote({
-        electionId,
-        candidateId,
-        encryptedVote
-      });
+      const currentUser = sqlService.getCurrentUser();
+      if (!currentUser) {
+        toast.error('You must be logged in to vote');
+        return;
+      }
+      
+      const voteData = {
+        voterId: currentUser.id,
+        candidateId: parseInt(candidateId),
+        electionId: parseInt(electionId)
+      };
+      
+      const encryptedVote = encryptVote(voteData);
+      
+      const result = await sqlService.castVote(voteData);
       
       if (result.success) {
         setCompletedElections([...completedElections, electionId]);
@@ -98,7 +106,7 @@ const Vote = () => {
   };
   
   const getElectionCandidates = (electionId: string) => {
-    return candidates.filter(candidate => candidate.election_id === electionId);
+    return candidates.filter(candidate => candidate.election_id.toString() === electionId);
   };
   
   return (

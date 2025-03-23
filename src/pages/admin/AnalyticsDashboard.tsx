@@ -54,7 +54,7 @@ const AnalyticsDashboard = () => {
       setElections(fetchedElections || []);
       
       // Load voting data for the selected election or all elections
-      const votingStats = await sqlService.getVotingStats(selectedElection !== 'all' ? selectedElection : undefined);
+      const votingStats = await sqlService.getVotingStats(selectedElection);
       setVotingData(votingStats?.votingTrends || []);
       setCandidateData(votingStats?.candidateStats || []);
       
