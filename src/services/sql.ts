@@ -65,6 +65,10 @@ export class SqlService {
     return this.currentUser;
   }
 
+  public isAdmin(): boolean {
+    return this.currentUser && this.currentUser.role === 'admin';
+  }
+
   public async isReady(): Promise<boolean> {
     if (!this.isConnected) {
       try {
@@ -173,9 +177,14 @@ export class SqlService {
       };
     }
   }
-
+  
   public async getUsers(role?: 'voter' | 'candidate' | 'admin') {
     await this.isReady();
+    
+    if (!this.isAdmin()) {
+      toast.error('Only administrators can access user management');
+      return [];
+    }
     
     try {
       let url = `${API_URL}/users`;
@@ -187,21 +196,27 @@ export class SqlService {
         headers: this.getHeaders()
       });
       
-      const data = await response.json();
-      
       if (!response.ok) {
+        const data = await response.json();
         throw new Error(data.message || 'Failed to fetch users');
       }
       
-      return data.users;
+      const data = await response.json();
+      return data.users || [];
     } catch (error) {
       console.error('Failed to fetch users:', error);
-      throw error;
+      toast.error('Failed to fetch users');
+      return [];
     }
   }
 
   public async updateUser(userId: number, userData: any) {
     await this.isReady();
+    
+    if (!this.isAdmin()) {
+      toast.error('Only administrators can update users');
+      return { success: false, error: 'Permission denied' };
+    }
     
     try {
       const response = await fetch(`${API_URL}/users/${userId}`, {
@@ -216,9 +231,11 @@ export class SqlService {
         throw new Error(data.message || 'Failed to update user');
       }
       
+      toast.success('User updated successfully');
       return { success: true };
     } catch (error) {
       console.error('Failed to update user:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to update user');
       return { 
         success: false, 
         error: error instanceof Error ? error.message : 'Unknown error' 
@@ -228,6 +245,11 @@ export class SqlService {
 
   public async deleteUser(userId: number) {
     await this.isReady();
+    
+    if (!this.isAdmin()) {
+      toast.error('Only administrators can delete users');
+      return { success: false, error: 'Permission denied' };
+    }
     
     try {
       const response = await fetch(`${API_URL}/users/${userId}`, {
@@ -241,9 +263,11 @@ export class SqlService {
         throw new Error(data.message || 'Failed to delete user');
       }
       
+      toast.success('User deleted successfully');
       return { success: true };
     } catch (error) {
       console.error('Failed to delete user:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to delete user');
       return { 
         success: false, 
         error: error instanceof Error ? error.message : 'Unknown error' 
@@ -259,21 +283,27 @@ export class SqlService {
         headers: this.getHeaders()
       });
       
-      const data = await response.json();
-      
       if (!response.ok) {
+        const data = await response.json();
         throw new Error(data.message || 'Failed to fetch elections');
       }
       
-      return data.elections;
+      const data = await response.json();
+      return data.elections || [];
     } catch (error) {
       console.error('Failed to fetch elections:', error);
-      throw error;
+      toast.error('Failed to fetch elections');
+      return [];
     }
   }
   
   public async createElection(electionData: any) {
     await this.isReady();
+    
+    if (!this.isAdmin()) {
+      toast.error('Only administrators can create elections');
+      return { success: false, error: 'Permission denied' };
+    }
     
     try {
       const response = await fetch(`${API_URL}/elections`, {
@@ -288,12 +318,14 @@ export class SqlService {
         throw new Error(data.message || 'Failed to create election');
       }
       
+      toast.success('Election created successfully');
       return { 
         success: true, 
         id: data.electionId 
       };
     } catch (error) {
       console.error('Failed to create election:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to create election');
       return { 
         success: false, 
         error: error instanceof Error ? error.message : 'Unknown error' 
@@ -303,6 +335,11 @@ export class SqlService {
 
   public async updateElection(electionId: number, electionData: any) {
     await this.isReady();
+    
+    if (!this.isAdmin()) {
+      toast.error('Only administrators can update elections');
+      return { success: false, error: 'Permission denied' };
+    }
     
     try {
       const response = await fetch(`${API_URL}/elections/${electionId}`, {
@@ -317,9 +354,11 @@ export class SqlService {
         throw new Error(data.message || 'Failed to update election');
       }
       
+      toast.success('Election updated successfully');
       return { success: true };
     } catch (error) {
       console.error('Failed to update election:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to update election');
       return { 
         success: false, 
         error: error instanceof Error ? error.message : 'Unknown error' 
@@ -329,6 +368,11 @@ export class SqlService {
 
   public async deleteElection(electionId: number) {
     await this.isReady();
+    
+    if (!this.isAdmin()) {
+      toast.error('Only administrators can delete elections');
+      return { success: false, error: 'Permission denied' };
+    }
     
     try {
       const response = await fetch(`${API_URL}/elections/${electionId}`, {
@@ -342,9 +386,11 @@ export class SqlService {
         throw new Error(data.message || 'Failed to delete election');
       }
       
+      toast.success('Election deleted successfully');
       return { success: true };
     } catch (error) {
       console.error('Failed to delete election:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to delete election');
       return { 
         success: false, 
         error: error instanceof Error ? error.message : 'Unknown error' 
@@ -365,16 +411,17 @@ export class SqlService {
         headers: this.getHeaders()
       });
       
-      const data = await response.json();
-      
       if (!response.ok) {
+        const data = await response.json();
         throw new Error(data.message || 'Failed to fetch candidates');
       }
       
-      return data.candidates;
+      const data = await response.json();
+      return data.candidates || [];
     } catch (error) {
       console.error('Failed to fetch candidates:', error);
-      throw error;
+      toast.error('Failed to fetch candidates');
+      return [];
     }
   }
 
@@ -385,6 +432,11 @@ export class SqlService {
     platform: string;
   }) {
     await this.isReady();
+    
+    if (!this.isAdmin()) {
+      toast.error('Only administrators can create candidates');
+      return { success: false, error: 'Permission denied' };
+    }
     
     try {
       const response = await fetch(`${API_URL}/candidates`, {
@@ -399,12 +451,14 @@ export class SqlService {
         throw new Error(data.message || 'Failed to create candidate');
       }
       
+      toast.success('Candidate created successfully');
       return { 
         success: true, 
         id: data.candidateId 
       };
     } catch (error) {
       console.error('Failed to create candidate:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to create candidate');
       return { 
         success: false, 
         error: error instanceof Error ? error.message : 'Unknown error' 
@@ -414,6 +468,11 @@ export class SqlService {
 
   public async updateCandidate(candidateId: number, candidateData: any) {
     await this.isReady();
+    
+    if (!this.isAdmin()) {
+      toast.error('Only administrators can update candidates');
+      return { success: false, error: 'Permission denied' };
+    }
     
     try {
       const response = await fetch(`${API_URL}/candidates/${candidateId}`, {
@@ -428,9 +487,11 @@ export class SqlService {
         throw new Error(data.message || 'Failed to update candidate');
       }
       
+      toast.success('Candidate updated successfully');
       return { success: true };
     } catch (error) {
       console.error('Failed to update candidate:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to update candidate');
       return { 
         success: false, 
         error: error instanceof Error ? error.message : 'Unknown error' 
@@ -440,6 +501,11 @@ export class SqlService {
 
   public async deleteCandidate(candidateId: number) {
     await this.isReady();
+    
+    if (!this.isAdmin()) {
+      toast.error('Only administrators can delete candidates');
+      return { success: false, error: 'Permission denied' };
+    }
     
     try {
       const response = await fetch(`${API_URL}/candidates/${candidateId}`, {
@@ -453,9 +519,11 @@ export class SqlService {
         throw new Error(data.message || 'Failed to delete candidate');
       }
       
+      toast.success('Candidate deleted successfully');
       return { success: true };
     } catch (error) {
       console.error('Failed to delete candidate:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to delete candidate');
       return { 
         success: false, 
         error: error instanceof Error ? error.message : 'Unknown error' 
@@ -483,12 +551,14 @@ export class SqlService {
         throw new Error(data.message || 'Failed to cast vote');
       }
       
+      toast.success('Vote cast successfully');
       return { 
         success: true, 
         id: data.voteId 
       };
     } catch (error) {
       console.error('Failed to cast vote:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to cast vote');
       return { 
         success: false, 
         error: error instanceof Error ? error.message : 'Unknown error' 
@@ -508,15 +578,16 @@ export class SqlService {
         headers: this.getHeaders()
       });
       
-      const data = await response.json();
-      
       if (!response.ok) {
+        const data = await response.json();
         throw new Error(data.message || 'Failed to fetch user votes');
       }
       
+      const data = await response.json();
       return data.votes || [];
     } catch (error) {
       console.error('Failed to fetch user votes:', error);
+      toast.error('Failed to fetch your voting history');
       return [];
     }
   }
@@ -529,21 +600,30 @@ export class SqlService {
         headers: this.getHeaders()
       });
       
-      const data = await response.json();
-      
       if (!response.ok) {
+        const data = await response.json();
         throw new Error(data.message || 'Failed to fetch results');
       }
       
-      return data.results;
+      const data = await response.json();
+      return data.results || [];
     } catch (error) {
       console.error('Failed to fetch election results:', error);
-      throw error;
+      toast.error('Failed to fetch election results');
+      return [];
     }
   }
   
   public async getVotingStats(electionId?: string) {
     await this.isReady();
+    
+    if (!this.isAdmin()) {
+      toast.error('Only administrators can access voting statistics');
+      return {
+        votingTrends: [],
+        candidateStats: []
+      };
+    }
     
     try {
       let url = `${API_URL}/analytics/voting`;
@@ -555,30 +635,19 @@ export class SqlService {
         headers: this.getHeaders()
       });
       
-      const data = await response.json();
-      
       if (!response.ok) {
+        const data = await response.json();
         throw new Error(data.message || 'Failed to fetch voting statistics');
       }
       
+      const data = await response.json();
       return data;
     } catch (error) {
       console.error('Failed to fetch voting statistics:', error);
+      toast.error('Failed to fetch voting statistics');
       return {
-        votingTrends: [
-          { time: '8:00 AM', votes: 12 },
-          { time: '9:00 AM', votes: 18 },
-          { time: '10:00 AM', votes: 25 },
-          { time: '11:00 AM', votes: 31 },
-          { time: '12:00 PM', votes: 42 },
-          { time: '1:00 PM', votes: 50 },
-        ],
-        candidateStats: [
-          { name: 'John Doe', votes: 145 },
-          { name: 'Jane Smith', votes: 132 },
-          { name: 'Alex Johnson', votes: 98 },
-          { name: 'Sarah Williams', votes: 78 },
-        ]
+        votingTrends: [],
+        candidateStats: []
       };
     }
   }
@@ -586,25 +655,36 @@ export class SqlService {
   public async getVoterStats() {
     await this.isReady();
     
+    if (!this.isAdmin()) {
+      toast.error('Only administrators can access voter statistics');
+      return {
+        total: 0,
+        active: 0,
+        pending: 0,
+        participation: 0
+      };
+    }
+    
     try {
       const response = await fetch(`${API_URL}/analytics/voters`, {
         headers: this.getHeaders()
       });
       
-      const data = await response.json();
-      
       if (!response.ok) {
+        const data = await response.json();
         throw new Error(data.message || 'Failed to fetch voter statistics');
       }
       
+      const data = await response.json();
       return data;
     } catch (error) {
       console.error('Failed to fetch voter statistics:', error);
+      toast.error('Failed to fetch voter statistics');
       return {
-        total: 500,
-        active: 320,
-        pending: 180,
-        participation: 64
+        total: 0,
+        active: 0,
+        pending: 0,
+        participation: 0
       };
     }
   }

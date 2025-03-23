@@ -6,7 +6,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { Button } from '@/components/ui/button';
-import { CalendarDays, Users, Vote, TrendingUp, RefreshCw } from 'lucide-react';
+import { CalendarDays, Users, Vote, TrendingUp, RefreshCw, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
 import { sqlService } from '@/services/sql';
 
@@ -26,15 +26,23 @@ const AnalyticsDashboard = () => {
     participation: 0
   });
   const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [isAuthorized, setIsAuthorized] = useState<boolean>(false);
   const [refreshInterval, setRefreshInterval] = useState<number>(30); // seconds
   
   // Check if user is admin
   useEffect(() => {
     const currentUser = sqlService.getCurrentUser();
-    if (!currentUser || currentUser.role !== 'admin') {
-      toast.error('Unauthorized access. Please log in as admin.');
+    if (!currentUser) {
+      toast.error('Please log in to continue.');
       navigate('/login');
+      return;
+    }
+    
+    if (currentUser.role !== 'admin') {
+      setIsAuthorized(false);
+      toast.error('This page requires administrator privileges.');
     } else {
+      setIsAuthorized(true);
       loadData();
       
       // Set up real-time refresh
@@ -79,6 +87,24 @@ const AnalyticsDashboard = () => {
     toast.info(`Refreshing data...`);
     loadData();
   };
+  
+  if (!isAuthorized) {
+    return (
+      <div className="container mx-auto px-4 py-12 text-center">
+        <div className="flex flex-col items-center justify-center gap-4">
+          <AlertTriangle className="h-16 w-16 text-yellow-500" />
+          <h1 className="text-3xl font-bold">Access Restricted</h1>
+          <p className="text-muted-foreground max-w-md">
+            You don't have permission to access the Analytics Dashboard. 
+            Please contact an administrator if you believe this is an error.
+          </p>
+          <Button variant="default" onClick={() => navigate('/')} className="mt-4">
+            Return to Home
+          </Button>
+        </div>
+      </div>
+    );
+  }
   
   return (
     <div className="container mx-auto px-4 py-8">
