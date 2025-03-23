@@ -1,158 +1,142 @@
 
-import React, { useState } from 'react';
+import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Checkbox } from '@/components/ui/checkbox';
+import { toast } from 'sonner';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
-import { toast } from 'sonner';
-import { sqlService } from '@/services/sql';
-import { Checkbox } from '@/components/ui/checkbox';
-import { signupSchema, SignupFormData } from '@/schemas/signupSchema';
+import { signupSchema, type SignupFormData } from '@/schemas/signupSchema';
 import RoleSelector from './RoleSelector';
+import { sqlService } from '@/services/sql';
 
-const SignupForm: React.FC = () => {
+const SignupForm = () => {
   const navigate = useNavigate();
-  const [isLoading, setIsLoading] = useState(false);
   
   const form = useForm<SignupFormData>({
     resolver: zodResolver(signupSchema),
     defaultValues: {
-      name: "",
-      email: "",
-      password: "",
-      confirmPassword: "",
-      role: "voter",
-      termsAccepted: false
-    }
+      name: '',
+      email: '',
+      password: '',
+      confirmPassword: '',
+      role: 'voter',
+      termsAccepted: false,
+    },
   });
   
   const onSubmit = async (data: SignupFormData) => {
-    setIsLoading(true);
-    
     try {
-      // Connect to SQL database and register the user
-      const result = await sqlService.registerUser({
+      const response = await sqlService.registerUser({
         name: data.name,
         email: data.email,
-        password: data.password, // In production, ensure this is handled securely
+        password: data.password,
         role: data.role,
-        registeredAt: new Date()
       });
       
-      if (result.success) {
-        toast.success(`Successfully registered as a ${data.role}!`);
-        
-        // Redirect based on role
-        if (data.role === "voter") {
-          navigate("/vote");
-        } else {
-          navigate("/candidates");
-        }
+      if (response.success) {
+        toast.success('Registration successful!');
+        navigate('/login');
       } else {
-        throw new Error("Registration failed");
+        throw new Error(response.error);
       }
-      
     } catch (error) {
-      console.error("Signup error:", error);
-      toast.error("Registration failed. Please try again.");
-    } finally {
-      setIsLoading(false);
+      console.error('Registration error:', error);
+      toast.error(error instanceof Error ? error.message : 'Registration failed');
     }
   };
 
   return (
-    <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-        <FormField
-          control={form.control}
-          name="name"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Full Name</FormLabel>
-              <FormControl>
-                <Input placeholder="John Doe" {...field} />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
+    <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+      <div>
+        <Label htmlFor="name">Full Name</Label>
+        <Input
+          id="name"
+          type="text"
+          {...form.register('name')}
+          className="mt-1"
         />
-        
-        <FormField
-          control={form.control}
-          name="email"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Email</FormLabel>
-              <FormControl>
-                <Input type="email" placeholder="your.email@example.com" {...field} />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
+        {form.formState.errors.name && (
+          <p className="text-sm text-destructive mt-1">
+            {form.formState.errors.name.message}
+          </p>
+        )}
+      </div>
+
+      <div>
+        <Label htmlFor="email">Email</Label>
+        <Input
+          id="email"
+          type="email"
+          {...form.register('email')}
+          className="mt-1"
         />
-        
-        <FormField
-          control={form.control}
-          name="password"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Password</FormLabel>
-              <FormControl>
-                <Input type="password" placeholder="••••••••" {...field} />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
+        {form.formState.errors.email && (
+          <p className="text-sm text-destructive mt-1">
+            {form.formState.errors.email.message}
+          </p>
+        )}
+      </div>
+
+      <div>
+        <Label htmlFor="password">Password</Label>
+        <Input
+          id="password"
+          type="password"
+          {...form.register('password')}
+          className="mt-1"
         />
-        
-        <FormField
-          control={form.control}
-          name="confirmPassword"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Confirm Password</FormLabel>
-              <FormControl>
-                <Input type="password" placeholder="••••••••" {...field} />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
+        {form.formState.errors.password && (
+          <p className="text-sm text-destructive mt-1">
+            {form.formState.errors.password.message}
+          </p>
+        )}
+      </div>
+
+      <div>
+        <Label htmlFor="confirmPassword">Confirm Password</Label>
+        <Input
+          id="confirmPassword"
+          type="password"
+          {...form.register('confirmPassword')}
+          className="mt-1"
         />
-        
-        <RoleSelector form={form} />
-        
-        <FormField
-          control={form.control}
-          name="termsAccepted"
-          render={({ field }) => (
-            <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-md p-4 border">
-              <FormControl>
-                <Checkbox
-                  checked={field.value}
-                  onCheckedChange={field.onChange}
-                />
-              </FormControl>
-              <div className="space-y-1 leading-none">
-                <FormLabel>
-                  I accept the terms and conditions
-                </FormLabel>
-                <FormMessage />
-              </div>
-            </FormItem>
-          )}
+        {form.formState.errors.confirmPassword && (
+          <p className="text-sm text-destructive mt-1">
+            {form.formState.errors.confirmPassword.message}
+          </p>
+        )}
+      </div>
+
+      <RoleSelector
+        value={form.watch('role')}
+        onChange={(value) => form.setValue('role', value)}
+      />
+
+      <div className="flex items-center space-x-2">
+        <Checkbox
+          id="terms"
+          checked={form.watch('termsAccepted')}
+          onCheckedChange={(checked) => 
+            form.setValue('termsAccepted', checked as boolean)
+          }
         />
-        
-        <Button 
-          type="submit" 
-          className="w-full btn-primary mt-6"
-          disabled={isLoading}
-        >
-          {isLoading ? 'Creating account...' : 'Create Account'}
-        </Button>
-      </form>
-    </Form>
+        <Label htmlFor="terms" className="text-sm">
+          I accept the terms and conditions
+        </Label>
+      </div>
+      {form.formState.errors.termsAccepted && (
+        <p className="text-sm text-destructive mt-1">
+          {form.formState.errors.termsAccepted.message}
+        </p>
+      )}
+
+      <Button type="submit" className="w-full">
+        Sign Up
+      </Button>
+    </form>
   );
 };
 
