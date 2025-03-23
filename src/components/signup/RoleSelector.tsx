@@ -2,7 +2,7 @@
 import React from 'react';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Label } from '@/components/ui/label';
-import { User, Users } from 'lucide-react';
+import { User, Users, Shield } from 'lucide-react';
 
 type RoleType = "voter" | "candidate" | "admin";
 
@@ -18,7 +18,7 @@ const RoleSelector: React.FC<RoleSelectorProps> = ({ value, onChange }) => {
       <RadioGroup
         value={value}
         onValueChange={onChange}
-        className="flex space-x-4"
+        className="flex flex-wrap gap-4"
       >
         <div className="flex items-center space-x-2">
           <RadioGroupItem value="voter" id="voter" />
@@ -32,6 +32,13 @@ const RoleSelector: React.FC<RoleSelectorProps> = ({ value, onChange }) => {
           <Label htmlFor="candidate" className="flex items-center">
             <Users className="h-4 w-4 mr-2" />
             Candidate
+          </Label>
+        </div>
+        <div className="flex items-center space-x-2">
+          <RadioGroupItem value="admin" id="admin" />
+          <Label htmlFor="admin" className="flex items-center">
+            <Shield className="h-4 w-4 mr-2" />
+            Admin
           </Label>
         </div>
       </RadioGroup>

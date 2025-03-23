@@ -15,6 +15,7 @@ import ElectionManagement from "./pages/ElectionManagement";
 import NotFound from "./pages/NotFound";
 import UserManagement from "./pages/admin/UserManagement";
 import CandidateManagement from "./pages/admin/CandidateManagement";
+import AnalyticsDashboard from "./pages/admin/AnalyticsDashboard";
 
 const queryClient = new QueryClient();
 
@@ -35,6 +36,7 @@ const App = () => (
           <Route path="/admin/elections" element={<ElectionManagement />} />
           <Route path="/admin/users" element={<UserManagement />} />
           <Route path="/admin/candidates" element={<CandidateManagement />} />
+          <Route path="/admin/analytics" element={<AnalyticsDashboard />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>

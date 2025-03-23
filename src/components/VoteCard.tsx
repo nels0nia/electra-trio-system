@@ -2,9 +2,10 @@
 import React, { useState } from 'react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Vote, ChevronRight, ClipboardCheck, Check } from 'lucide-react';
+import { Vote, ChevronRight, ClipboardCheck, Check, Lock } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import CandidateProfile from './CandidateProfile';
+import { encryptVote } from '@/utils/cryptoUtils';
 
 interface Candidate {
   id: string;
@@ -26,7 +27,7 @@ interface VoteCardProps {
     status: 'upcoming' | 'active' | 'ended';
   };
   candidates: Candidate[];
-  onVote: (electionId: string, candidateId: string) => void;
+  onVote: (electionId: string, candidateId: string, encryptedVote: string) => void;
 }
 
 const VoteCard = ({ election, candidates, onVote }: VoteCardProps) => {
@@ -39,7 +40,18 @@ const VoteCard = ({ election, candidates, onVote }: VoteCardProps) => {
   
   const handleVoteSubmit = () => {
     if (selectedCandidate) {
-      onVote(election.id, selectedCandidate);
+      // Encrypt the vote before sending to the server
+      const voteData = {
+        electionId: election.id,
+        candidateId: selectedCandidate,
+        timestamp: new Date().toISOString()
+      };
+      
+      // Generate encrypted vote
+      const encryptedVote = encryptVote(voteData);
+      
+      // Pass both the IDs and the encrypted vote to the parent component
+      onVote(election.id, selectedCandidate, encryptedVote);
       setStep('success');
     }
   };
@@ -79,11 +91,29 @@ const VoteCard = ({ election, candidates, onVote }: VoteCardProps) => {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
               <div className="flex items-center text-sm">
                 <span className="text-muted-foreground mr-2">Start Date:</span>
-                <span>{new Date(election.startDate).toLocaleDateString()}</span>
+                <span>
+                  {new Date(election.startDate).toLocaleDateString('en-US', {
+                    timeZone: 'Africa/Nairobi', // EAT timezone
+                    year: 'numeric',
+                    month: 'long',
+                    day: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit'
+                  })}
+                </span>
               </div>
               <div className="flex items-center text-sm">
                 <span className="text-muted-foreground mr-2">End Date:</span>
-                <span>{new Date(election.endDate).toLocaleDateString()}</span>
+                <span>
+                  {new Date(election.endDate).toLocaleDateString('en-US', {
+                    timeZone: 'Africa/Nairobi', // EAT timezone
+                    year: 'numeric',
+                    month: 'long',
+                    day: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit'
+                  })}
+                </span>
               </div>
             </div>
             
@@ -205,6 +235,19 @@ const VoteCard = ({ election, candidates, onVote }: VoteCardProps) => {
               </div>
             </div>
             
+            <div className="bg-blue-50 dark:bg-blue-950/20 p-4 rounded-md mb-6">
+              <div className="flex items-start">
+                <Lock className="h-5 w-5 text-blue-500 mt-0.5 mr-3 flex-shrink-0" />
+                <div>
+                  <h4 className="text-sm font-medium text-blue-700 dark:text-blue-300">Secure Voting</h4>
+                  <p className="text-xs text-blue-600/80 dark:text-blue-400/80 mt-1">
+                    Your vote will be encrypted before being sent to our servers. This ensures 
+                    your vote remains private and tamper-proof throughout the election process.
+                  </p>
+                </div>
+              </div>
+            </div>
+            
             <div className="text-sm text-muted-foreground mb-6">
               <p>Important Note:</p>
               <ul className="list-disc list-inside mt-1 space-y-1">
@@ -237,7 +280,7 @@ const VoteCard = ({ election, candidates, onVote }: VoteCardProps) => {
             </div>
             <h3 className="text-2xl font-medium mb-2">Vote Successful!</h3>
             <p className="text-muted-foreground mb-6 max-w-sm mx-auto">
-              Your vote has been successfully recorded. Thank you for participating in this election.
+              Your vote has been securely recorded and encrypted. Thank you for participating in this election.
             </p>
             <Button 
               onClick={() => setStep('info')}

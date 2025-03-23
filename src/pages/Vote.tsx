@@ -8,94 +8,97 @@ import Footer from '@/components/Footer';
 import VoteCard from '@/components/VoteCard';
 import { Calendar, Vote as VoteIcon, CheckCircle } from 'lucide-react';
 import { toast } from 'sonner';
-
-// Mock election data
-const activeElections = [
-  {
-    id: '1',
-    title: 'City Council Election',
-    description: 'Election for city council representatives. Choose your preferred candidate to represent your district for the next 4 years.',
-    startDate: '2024-05-01T00:00:00.000Z',
-    endDate: '2024-05-15T23:59:59.000Z',
-    status: 'active' as const,
-  }
-];
-
-const upcomingElections = [
-  {
-    id: '2',
-    title: 'Presidential Election 2024',
-    description: 'National election for the president of the country. This is a crucial vote that will determine the leadership for the next term.',
-    startDate: '2024-06-01T00:00:00.000Z',
-    endDate: '2024-06-02T23:59:59.000Z',
-    status: 'upcoming' as const,
-  }
-];
-
-const pastElections = [
-  {
-    id: '3',
-    title: 'Student Body President',
-    description: 'University election for student body president. The elected candidate will represent student interests to the administration.',
-    startDate: '2024-02-15T00:00:00.000Z',
-    endDate: '2024-03-01T23:59:59.000Z',
-    status: 'ended' as const,
-  }
-];
-
-// Mock candidates data
-const candidates = [
-  {
-    id: '1',
-    name: 'James Wilson',
-    position: 'City Council',
-    party: 'Independent',
-    bio: 'Committed to sustainable urban development and improving public transportation infrastructure for all citizens.',
-    image: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?ixlib=rb-1.2.1&auto=format&fit=facearea&facepad=2&w=256&h=256&q=80',
-    experience: '8 years in local government',
-  },
-  {
-    id: '2',
-    name: 'Emily Parker',
-    position: 'City Council',
-    party: 'Progressive Alliance',
-    bio: 'Focused on affordable housing, education reform, and creating equitable opportunities for all community members.',
-    image: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?ixlib=rb-1.2.1&auto=format&fit=facearea&facepad=2&w=256&h=256&q=80',
-    experience: '5 years as community organizer',
-  },
-  {
-    id: '3',
-    name: 'Robert Chen',
-    position: 'City Council',
-    party: 'Citizens Party',
-    bio: 'Dedicated to economic development, public safety, and transparent governance that serves citizens first.',
-    image: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?ixlib=rb-1.2.1&auto=format&fit=facearea&facepad=2&w=256&h=256&q=80',
-    experience: '12 years in business leadership',
-  }
-];
+import { sqlService } from '@/services/sql';
 
 const Vote = () => {
   const navigate = useNavigate();
   const [completedElections, setCompletedElections] = useState<string[]>([]);
+  const [activeElections, setActiveElections] = useState<any[]>([]);
+  const [upcomingElections, setUpcomingElections] = useState<any[]>([]);
+  const [pastElections, setPastElections] = useState<any[]>([]);
+  const [candidates, setCandidates] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
   
-  // Check if user is voter, redirect if not
+  // Check if user is voter or candidate, redirect if not
   useEffect(() => {
-    const userType = localStorage.getItem('userType');
-    if (userType !== 'voter') {
-      toast.error('Unauthorized access. Please log in as voter.');
+    const currentUser = sqlService.getCurrentUser();
+    if (!currentUser || (currentUser.role !== 'voter' && currentUser.role !== 'candidate')) {
+      toast.error('Unauthorized access. Please log in as voter or candidate.');
       navigate('/login');
+    } else {
+      loadElections();
+      loadCandidates();
+      loadCompletedElections();
     }
   }, [navigate]);
   
-  const handleVote = (electionId: string, candidateId: string) => {
-    // In a real app, this would submit to backend
-    console.log(`Voted for candidate ${candidateId} in election ${electionId}`);
-    setCompletedElections([...completedElections, electionId]);
-    toast.success('Your vote has been recorded successfully!');
+  const loadElections = async () => {
+    setLoading(true);
+    try {
+      const allElections = await sqlService.getElections();
+      
+      if (allElections) {
+        setActiveElections(allElections.filter(e => e.status === 'active') || []);
+        setUpcomingElections(allElections.filter(e => e.status === 'upcoming') || []);
+        setPastElections(allElections.filter(e => e.status === 'ended') || []);
+      }
+    } catch (error) {
+      console.error('Failed to load elections:', error);
+      toast.error('Failed to load elections. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+  
+  const loadCandidates = async () => {
+    try {
+      const allCandidates = await sqlService.getCandidates();
+      setCandidates(allCandidates || []);
+    } catch (error) {
+      console.error('Failed to load candidates:', error);
+      toast.error('Failed to load candidates. Please try again.');
+    }
+  };
+  
+  const loadCompletedElections = async () => {
+    try {
+      const userVotes = await sqlService.getUserVotes();
+      if (userVotes) {
+        const electionIds = userVotes.map(vote => vote.election_id);
+        setCompletedElections(electionIds);
+      }
+    } catch (error) {
+      console.error('Failed to load completed elections:', error);
+    }
+  };
+  
+  const handleVote = async (electionId: string, candidateId: string, encryptedVote: string) => {
+    try {
+      // Submit encrypted vote to the server
+      const result = await sqlService.castVote({
+        electionId,
+        candidateId,
+        encryptedVote
+      });
+      
+      if (result.success) {
+        setCompletedElections([...completedElections, electionId]);
+        toast.success('Your vote has been securely recorded!');
+      } else {
+        throw new Error(result.error || 'Failed to cast vote');
+      }
+    } catch (error) {
+      console.error('Error casting vote:', error);
+      toast.error('Failed to cast vote. Please try again.');
+    }
   };
   
   const hasVoted = (electionId: string) => {
     return completedElections.includes(electionId);
+  };
+  
+  const getElectionCandidates = (electionId: string) => {
+    return candidates.filter(candidate => candidate.election_id === electionId);
   };
   
   return (
@@ -128,7 +131,11 @@ const Vote = () => {
             </TabsList>
             
             <TabsContent value="active" className="animate-fade-in space-y-6">
-              {activeElections.length > 0 ? (
+              {loading ? (
+                <Card className="glass-card p-8 text-center">
+                  <p className="text-muted-foreground">Loading elections...</p>
+                </Card>
+              ) : activeElections.length > 0 ? (
                 activeElections.map((election) => (
                   <div key={election.id}>
                     {hasVoted(election.id) ? (
@@ -146,7 +153,7 @@ const Vote = () => {
                     ) : (
                       <VoteCard
                         election={election}
-                        candidates={candidates}
+                        candidates={getElectionCandidates(election.id)}
                         onVote={handleVote}
                       />
                     )}
@@ -160,12 +167,16 @@ const Vote = () => {
             </TabsContent>
             
             <TabsContent value="upcoming" className="animate-fade-in space-y-6">
-              {upcomingElections.length > 0 ? (
+              {loading ? (
+                <Card className="glass-card p-8 text-center">
+                  <p className="text-muted-foreground">Loading elections...</p>
+                </Card>
+              ) : upcomingElections.length > 0 ? (
                 upcomingElections.map((election) => (
                   <VoteCard
                     key={election.id}
                     election={election}
-                    candidates={candidates}
+                    candidates={getElectionCandidates(election.id)}
                     onVote={handleVote}
                   />
                 ))
@@ -177,7 +188,11 @@ const Vote = () => {
             </TabsContent>
             
             <TabsContent value="completed" className="animate-fade-in space-y-6">
-              {pastElections.length > 0 || completedElections.length > 0 ? (
+              {loading ? (
+                <Card className="glass-card p-8 text-center">
+                  <p className="text-muted-foreground">Loading elections...</p>
+                </Card>
+              ) : pastElections.length > 0 || completedElections.length > 0 ? (
                 <>
                   {pastElections.map((election) => (
                     <Card key={election.id} className="glass-card p-6">
@@ -198,14 +213,30 @@ const Vote = () => {
                         <div className="flex items-center text-sm">
                           <span className="text-muted-foreground mr-2">Voting Period:</span>
                           <span>
-                            {new Date(election.startDate).toLocaleDateString()} - {new Date(election.endDate).toLocaleDateString()}
+                            {new Date(election.startDate).toLocaleDateString('en-US', { 
+                              timeZone: 'Africa/Nairobi',
+                              year: 'numeric',
+                              month: 'long',
+                              day: 'numeric' 
+                            })} - {new Date(election.endDate).toLocaleDateString('en-US', { 
+                              timeZone: 'Africa/Nairobi',
+                              year: 'numeric',
+                              month: 'long',
+                              day: 'numeric' 
+                            })}
                           </span>
                         </div>
                         <div className="flex items-center justify-start md:justify-end">
-                          <span className="bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300 px-3 py-1 rounded-full text-xs font-medium flex items-center">
-                            <CheckCircle className="h-3 w-3 mr-1.5" />
-                            Participated
-                          </span>
+                          {hasVoted(election.id) ? (
+                            <span className="bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300 px-3 py-1 rounded-full text-xs font-medium flex items-center">
+                              <CheckCircle className="h-3 w-3 mr-1.5" />
+                              Participated
+                            </span>
+                          ) : (
+                            <span className="bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-300 px-3 py-1 rounded-full text-xs font-medium">
+                              Did not participate
+                            </span>
+                          )}
                         </div>
                       </div>
                     </Card>
@@ -232,7 +263,17 @@ const Vote = () => {
                           <div className="flex items-center text-sm">
                             <span className="text-muted-foreground mr-2">Voting Period:</span>
                             <span>
-                              {new Date(election.startDate).toLocaleDateString()} - {new Date(election.endDate).toLocaleDateString()}
+                              {new Date(election.startDate).toLocaleDateString('en-US', { 
+                                timeZone: 'Africa/Nairobi',
+                                year: 'numeric',
+                                month: 'long',
+                                day: 'numeric' 
+                              })} - {new Date(election.endDate).toLocaleDateString('en-US', { 
+                                timeZone: 'Africa/Nairobi',
+                                year: 'numeric',
+                                month: 'long',
+                                day: 'numeric' 
+                              })}
                             </span>
                           </div>
                           <div className="flex items-center justify-start md:justify-end">
