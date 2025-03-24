@@ -10,6 +10,7 @@ import { Vote, Shield, User, Users } from 'lucide-react';
 import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
 import { toast } from 'sonner';
+import { sqlService } from '@/services/sql';
 
 const Login = () => {
   const navigate = useNavigate();
@@ -18,32 +19,40 @@ const Login = () => {
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
     
-    // Simulating authentication - in real app, this would call your backend
-    setTimeout(() => {
-      localStorage.setItem('userType', userType);
+    try {
+      // Call the actual backend authentication API
+      const result = await sqlService.loginUser({ email, password });
       
-      toast.success('Logged in successfully!');
-      setIsLoading(false);
-      
-      // Redirect based on user type
-      switch (userType) {
-        case 'admin':
-          navigate('/dashboard');
-          break;
-        case 'voter':
-          navigate('/vote');
-          break;
-        case 'candidate':
-          navigate('/results');
-          break;
-        default:
-          navigate('/');
+      if (result.success) {
+        toast.success('Logged in successfully!');
+        
+        // Redirect based on user role from the API response
+        switch (result.user.role) {
+          case 'admin':
+            navigate('/dashboard');
+            break;
+          case 'voter':
+            navigate('/vote');
+            break;
+          case 'candidate':
+            navigate('/results');
+            break;
+          default:
+            navigate('/');
+        }
+      } else {
+        toast.error(result.error || 'Login failed. Please check your credentials.');
       }
-    }, 1500);
+    } catch (error) {
+      console.error('Login error:', error);
+      toast.error('Login failed. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
   };
   
   // Function to handle user type selection and populate demo credentials

@@ -1,15 +1,13 @@
-
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'sonner';
 import { Textarea } from '@/components/ui/textarea';
-import { Users, UserPlus, Edit, Trash2, Search, MoreHorizontal, AlertCircle } from 'lucide-react';
+import { Users, UserPlus, Edit, Trash2, Search, MoreHorizontal } from 'lucide-react';
 import { sqlService } from '@/services/sql';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
@@ -33,6 +31,7 @@ const CandidateManagement = () => {
   const [users, setUsers] = useState<any[]>([]);
   const [elections, setElections] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingUsers, setLoadingUsers] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCandidate, setSelectedCandidate] = useState<any | null>(null);
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
@@ -65,7 +64,7 @@ const CandidateManagement = () => {
       navigate('/login');
     } else {
       loadCandidates();
-      loadUsers();
+      loadAllUsers();
       loadElections();
     }
   }, [navigate]);
@@ -83,13 +82,16 @@ const CandidateManagement = () => {
     }
   };
 
-  const loadUsers = async () => {
+  const loadAllUsers = async () => {
+    setLoadingUsers(true);
     try {
-      const fetchedUsers = await sqlService.getUsers('voter');
+      const fetchedUsers = await sqlService.getUsers();
       setUsers(fetchedUsers || []);
     } catch (error) {
       console.error('Failed to load users:', error);
       toast.error('Failed to load users. Please try again.');
+    } finally {
+      setLoadingUsers(false);
     }
   };
 
@@ -279,15 +281,21 @@ const CandidateManagement = () => {
                     <Select onValueChange={field.onChange} defaultValue={field.value?.toString()}>
                       <FormControl>
                         <SelectTrigger>
-                          <SelectValue placeholder="Select a user" />
+                          <SelectValue placeholder={loadingUsers ? "Loading users..." : "Select a user"} />
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        {users.map(user => (
-                          <SelectItem key={user.id} value={user.id.toString()}>
-                            {user.name} ({user.email})
-                          </SelectItem>
-                        ))}
+                        {loadingUsers ? (
+                          <SelectItem value="loading" disabled>Loading users...</SelectItem>
+                        ) : users.length === 0 ? (
+                          <SelectItem value="none" disabled>No users found</SelectItem>
+                        ) : (
+                          users.map(user => (
+                            <SelectItem key={user.id} value={user.id.toString()}>
+                              {user.name} ({user.email})
+                            </SelectItem>
+                          ))
+                        )}
                       </SelectContent>
                     </Select>
                     <FormMessage />
