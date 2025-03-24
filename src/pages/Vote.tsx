@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
@@ -7,7 +6,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Helmet } from 'react-helmet';
+import * as ReactHelmet from 'react-helmet';
 import { AlertCircle, Check, ThumbsUp } from 'lucide-react';
 import { sqlService } from '@/services/sql';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -56,7 +55,6 @@ const Vote = () => {
   const fetchElectionsAndVotes = async () => {
     setIsLoading(true);
     try {
-      // Fetch active elections
       const electionsData = await sqlService.getElections();
       const now = new Date();
       const active = electionsData.filter(
@@ -71,11 +69,9 @@ const Vote = () => {
       if (active.length > 0) {
         setSelectedElection(active[0].id);
         
-        // Fetch candidates for the first election
         const candidatesData = await sqlService.getCandidates(active[0].id);
         setCandidates(candidatesData);
         
-        // Check if user has already voted in this election
         const votes = await sqlService.getUserVotes();
         const hasAlreadyVoted = votes.some((vote: any) => vote.election_id === active[0].id);
         setHasVoted(hasAlreadyVoted);
@@ -94,11 +90,9 @@ const Vote = () => {
     setSelectedCandidate(null);
     
     try {
-      // Fetch candidates for the selected election
       const candidatesData = await sqlService.getCandidates(electionIdNum);
       setCandidates(candidatesData);
       
-      // Check if user has already voted in this election
       const votes = await sqlService.getUserVotes();
       const hasAlreadyVoted = votes.some((vote: any) => vote.election_id === electionIdNum);
       setHasVoted(hasAlreadyVoted);
@@ -137,9 +131,9 @@ const Vote = () => {
   if (isLoading) {
     return (
       <div className="container mx-auto px-4 py-8">
-        <Helmet>
+        <ReactHelmet.Helmet>
           <title>Vote | VoteX</title>
-        </Helmet>
+        </ReactHelmet.Helmet>
         <h1 className="text-3xl font-bold mb-6">Cast Your Vote</h1>
         <Card>
           <CardHeader>
@@ -170,9 +164,9 @@ const Vote = () => {
   if (activeElections.length === 0) {
     return (
       <div className="container mx-auto px-4 py-8">
-        <Helmet>
+        <ReactHelmet.Helmet>
           <title>Vote | VoteX</title>
-        </Helmet>
+        </ReactHelmet.Helmet>
         <h1 className="text-3xl font-bold mb-6">Cast Your Vote</h1>
         <Alert>
           <AlertCircle className="h-4 w-4" />
@@ -194,9 +188,9 @@ const Vote = () => {
   if (isSuccess) {
     return (
       <div className="container mx-auto px-4 py-8">
-        <Helmet>
+        <ReactHelmet.Helmet>
           <title>Vote Successful | VoteX</title>
-        </Helmet>
+        </ReactHelmet.Helmet>
         <h1 className="text-3xl font-bold mb-6">Vote Successful</h1>
         <Card>
           <CardContent className="pt-6 text-center">
@@ -221,9 +215,9 @@ const Vote = () => {
 
   return (
     <div className="container mx-auto px-4 py-8">
-      <Helmet>
+      <ReactHelmet.Helmet>
         <title>Vote | VoteX</title>
-      </Helmet>
+      </ReactHelmet.Helmet>
       <h1 className="text-3xl font-bold mb-6">Cast Your Vote</h1>
       
       {hasVoted && (

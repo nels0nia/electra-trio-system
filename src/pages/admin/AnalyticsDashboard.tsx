@@ -1,11 +1,10 @@
-
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
-import { Helmet } from 'react-helmet';
+import * as ReactHelmet from 'react-helmet';
 import { useNavigate } from 'react-router-dom';
 import { ChartContainer, ChartTooltipContent } from '@/components/ui/chart';
 import { sqlService, realTimeService } from '@/services/sql';
@@ -156,9 +155,9 @@ const AnalyticsDashboard = () => {
   
   return (
     <>
-      <Helmet>
+      <ReactHelmet.Helmet>
         <title>Analytics Dashboard | VoteX</title>
-      </Helmet>
+      </ReactHelmet.Helmet>
       
       <div className="container mx-auto px-4 py-8">
         <h1 className="text-3xl font-bold mb-6">Analytics Dashboard</h1>

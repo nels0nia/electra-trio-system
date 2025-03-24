@@ -1,6 +1,5 @@
-
 import React, { useState, useEffect } from 'react';
-import { Helmet } from 'react-helmet';
+import * as ReactHelmet from 'react-helmet';
 import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -57,21 +56,17 @@ const Dashboard = () => {
   const fetchDashboardData = async () => {
     setIsLoading(true);
     try {
-      // Fetch elections
       const electionsData = await sqlService.getElections();
       setElections(electionsData);
 
-      // Calculate statistics
       const now = new Date();
       const activeElections = electionsData.filter(e => 
         new Date(e.start_date) <= now && new Date(e.end_date) >= now
       ).length;
 
-      // Get voter and candidate counts
       const voters = await sqlService.getUsers('voter');
       const candidates = await sqlService.getCandidates();
 
-      // Calculate total votes from all elections
       const totalVotes = electionsData.reduce((sum, election) => sum + (election.vote_count || 0), 0);
 
       setStats({
@@ -103,9 +98,9 @@ const Dashboard = () => {
 
   return (
     <>
-      <Helmet>
+      <ReactHelmet.Helmet>
         <title>Dashboard | VoteX</title>
-      </Helmet>
+      </ReactHelmet.Helmet>
 
       <div className="container mx-auto px-4 py-8">
         <h1 className="text-3xl font-bold mb-6">
