@@ -1,235 +1,298 @@
 
 import React, { useState } from 'react';
-import { NavLink, useNavigate } from 'react-router-dom';
-import { cn } from '@/lib/utils';
+import { Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { 
-  Vote, 
-  Users, 
-  BarChart, 
-  Menu, 
-  X, 
-  LogOut,
-  User
-} from 'lucide-react';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from '@/components/ui/sheet';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { LogOut, Menu, User, BarChart3, Settings, Vote, Users } from 'lucide-react';
+import { sqlService } from '@/services/sql';
+import { toast } from 'sonner';
 
 const Navbar = () => {
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const navigate = useNavigate();
-  
-  // This would come from your auth context in a real app
-  const userType = localStorage.getItem('userType') || 'none'; // admin, voter, candidate, none
-  
-  const toggleMobileMenu = () => {
-    setMobileMenuOpen(!mobileMenuOpen);
-  };
-  
-  const handleLogin = () => {
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const user = sqlService.getCurrentUser();
+  const isAdmin = user?.role === 'admin';
+  const isLoggedIn = !!user;
+
+  const handleLogout = () => {
+    sqlService.clearToken();
+    toast.success('Logged out successfully');
     navigate('/login');
   };
-  
-  const handleLogout = () => {
-    // Clear auth data
-    localStorage.removeItem('userType');
-    navigate('/');
+
+  const getInitials = (name: string) => {
+    return name
+      .split(' ')
+      .map(part => part[0])
+      .join('')
+      .toUpperCase()
+      .substring(0, 2);
   };
 
   return (
-    <header className="fixed top-0 left-0 right-0 z-50 glass border-b border-border/50">
-      <div className="container flex items-center justify-between h-16 px-4 md:px-6">
-        <NavLink to="/" className="flex items-center space-x-2">
-          <Vote className="h-6 w-6 text-primary" />
-          <span className="font-semibold text-lg">VoteX</span>
-        </NavLink>
+    <nav className="border-b bg-white dark:bg-gray-950">
+      <div className="max-w-screen-xl flex flex-wrap items-center justify-between mx-auto p-4">
+        <Link to="/" className="flex items-center">
+          <span className="self-center text-2xl font-semibold text-primary">VoteX</span>
+        </Link>
         
-        {/* Desktop Navigation */}
-        <nav className="hidden md:flex items-center space-x-6">
-          <NavLink 
-            to="/" 
-            className={({isActive}) => cn("nav-link", isActive && "active")}
-            end
-          >
-            Home
-          </NavLink>
-          
-          {userType === 'admin' && (
-            <>
-              <NavLink 
-                to="/dashboard" 
-                className={({isActive}) => cn("nav-link", isActive && "active")}
-              >
-                Dashboard
-              </NavLink>
-              <NavLink 
-                to="/results" 
-                className={({isActive}) => cn("nav-link", isActive && "active")}
-              >
-                Results
-              </NavLink>
-            </>
-          )}
-          
-          {userType === 'voter' && (
-            <NavLink 
-              to="/vote" 
-              className={({isActive}) => cn("nav-link", isActive && "active")}
-            >
-              Vote
-            </NavLink>
-          )}
-          
-          {userType === 'candidate' && (
-            <NavLink 
-              to="/results" 
-              className={({isActive}) => cn("nav-link", isActive && "active")}
-            >
-              Results
-            </NavLink>
-          )}
-          
-          <NavLink 
-            to="/candidates" 
-            className={({isActive}) => cn("nav-link", isActive && "active")}
-          >
-            Candidates
-          </NavLink>
-        </nav>
-        
-        <div className="hidden md:flex items-center space-x-3">
-          {userType === 'none' ? (
-            <Button onClick={handleLogin} variant="default" className="btn-primary">
-              Log In
-            </Button>
+        <div className="flex items-center md:order-2 space-x-3 rtl:space-x-reverse">
+          {isLoggedIn ? (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" className="relative h-10 w-10 rounded-full">
+                  <Avatar className="h-10 w-10">
+                    <AvatarImage src="/placeholder.svg" alt={user.name} />
+                    <AvatarFallback>{getInitials(user.name)}</AvatarFallback>
+                  </Avatar>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent className="w-56" align="end" forceMount>
+                <DropdownMenuLabel className="font-normal">
+                  <div className="flex flex-col space-y-1">
+                    <p className="text-sm font-medium leading-none">{user.name}</p>
+                    <p className="text-xs leading-none text-muted-foreground">
+                      {user.email}
+                    </p>
+                    <p className="text-xs leading-none text-muted-foreground mt-1 capitalize">
+                      {user.role}
+                    </p>
+                  </div>
+                </DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem asChild>
+                  <Link to="/dashboard" className="w-full cursor-pointer">
+                    <User className="mr-2 h-4 w-4" />
+                    <span>Dashboard</span>
+                  </Link>
+                </DropdownMenuItem>
+                
+                {isAdmin && (
+                  <>
+                    <DropdownMenuItem asChild>
+                      <Link to="/admin/elections" className="w-full cursor-pointer">
+                        <Vote className="mr-2 h-4 w-4" />
+                        <span>Election Management</span>
+                      </Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem asChild>
+                      <Link to="/admin/users" className="w-full cursor-pointer">
+                        <Users className="mr-2 h-4 w-4" />
+                        <span>User Management</span>
+                      </Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem asChild>
+                      <Link to="/admin/candidates" className="w-full cursor-pointer">
+                        <User className="mr-2 h-4 w-4" />
+                        <span>Candidate Management</span>
+                      </Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem asChild>
+                      <Link to="/admin/analytics" className="w-full cursor-pointer">
+                        <BarChart3 className="mr-2 h-4 w-4" />
+                        <span>Analytics</span>
+                      </Link>
+                    </DropdownMenuItem>
+                  </>
+                )}
+                
+                <DropdownMenuItem asChild>
+                  <Link to="/settings" className="w-full cursor-pointer">
+                    <Settings className="mr-2 h-4 w-4" />
+                    <span>Settings</span>
+                  </Link>
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={handleLogout} className="cursor-pointer">
+                  <LogOut className="mr-2 h-4 w-4" />
+                  <span>Log out</span>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           ) : (
-            <div className="flex items-center gap-3">
-              <div className="flex items-center gap-2 text-sm">
-                <User className="h-4 w-4 text-muted-foreground" />
-                <span className="text-muted-foreground capitalize">{userType}</span>
-              </div>
-              <Button 
-                onClick={handleLogout} 
-                variant="ghost" 
-                size="icon"
-                className="hover:bg-destructive/10 hover:text-destructive"
-              >
-                <LogOut className="h-4 w-4" />
+            <div className="flex space-x-2">
+              <Button variant="outline" onClick={() => navigate('/login')}>
+                Log in
+              </Button>
+              <Button onClick={() => navigate('/signup')}>
+                Sign up
               </Button>
             </div>
           )}
-        </div>
-        
-        {/* Mobile Menu Button */}
-        <button
-          onClick={toggleMobileMenu}
-          className="md:hidden p-2 rounded-md text-foreground"
-          aria-label="Toggle menu"
-        >
-          {mobileMenuOpen ? (
-            <X className="h-6 w-6" />
-          ) : (
-            <Menu className="h-6 w-6" />
-          )}
-        </button>
-      </div>
-      
-      {/* Mobile Menu */}
-      {mobileMenuOpen && (
-        <div className="md:hidden glass border-t border-border/50 animate-fade-in">
-          <div className="px-4 py-3 space-y-3">
-            <NavLink 
-              to="/" 
-              className={({isActive}) => cn(
-                "block py-2.5 px-3 rounded-lg", 
-                isActive ? "bg-primary/10 text-primary font-medium" : "text-foreground hover:bg-muted"
-              )}
-              onClick={toggleMobileMenu}
-              end
-            >
-              Home
-            </NavLink>
-            
-            {userType === 'admin' && (
-              <>
-                <NavLink 
-                  to="/dashboard" 
-                  className={({isActive}) => cn(
-                    "block py-2.5 px-3 rounded-lg", 
-                    isActive ? "bg-primary/10 text-primary font-medium" : "text-foreground hover:bg-muted"
-                  )}
-                  onClick={toggleMobileMenu}
+          
+          <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
+            <SheetTrigger asChild>
+              <Button variant="ghost" size="icon" className="md:hidden">
+                <Menu className="h-6 w-6" />
+                <span className="sr-only">Toggle menu</span>
+              </Button>
+            </SheetTrigger>
+            <SheetContent side="left">
+              <SheetHeader>
+                <SheetTitle>VoteX</SheetTitle>
+                <SheetDescription>
+                  Secure Voting Platform
+                </SheetDescription>
+              </SheetHeader>
+              <div className="mt-6 flex flex-col space-y-2">
+                <Link 
+                  to="/" 
+                  className="px-4 py-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800"
+                  onClick={() => setMobileMenuOpen(false)}
                 >
-                  Dashboard
-                </NavLink>
-                <NavLink 
-                  to="/results" 
-                  className={({isActive}) => cn(
-                    "block py-2.5 px-3 rounded-lg", 
-                    isActive ? "bg-primary/10 text-primary font-medium" : "text-foreground hover:bg-muted"
-                  )}
-                  onClick={toggleMobileMenu}
+                  Home
+                </Link>
+                
+                {isLoggedIn && (
+                  <>
+                    <Link 
+                      to="/dashboard" 
+                      className="px-4 py-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800"
+                      onClick={() => setMobileMenuOpen(false)}
+                    >
+                      Dashboard
+                    </Link>
+                    <Link 
+                      to="/vote" 
+                      className="px-4 py-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800"
+                      onClick={() => setMobileMenuOpen(false)}
+                    >
+                      Vote
+                    </Link>
+                    <Link 
+                      to="/candidates" 
+                      className="px-4 py-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800"
+                      onClick={() => setMobileMenuOpen(false)}
+                    >
+                      Candidates
+                    </Link>
+                    <Link 
+                      to="/results" 
+                      className="px-4 py-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800"
+                      onClick={() => setMobileMenuOpen(false)}
+                    >
+                      Results
+                    </Link>
+                    
+                    {isAdmin && (
+                      <>
+                        <div className="my-2 border-t pt-2">
+                          <p className="px-4 text-sm font-medium text-muted-foreground">Admin</p>
+                        </div>
+                        <Link 
+                          to="/admin/elections" 
+                          className="px-4 py-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800"
+                          onClick={() => setMobileMenuOpen(false)}
+                        >
+                          Election Management
+                        </Link>
+                        <Link 
+                          to="/admin/users" 
+                          className="px-4 py-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800"
+                          onClick={() => setMobileMenuOpen(false)}
+                        >
+                          User Management
+                        </Link>
+                        <Link 
+                          to="/admin/candidates" 
+                          className="px-4 py-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800"
+                          onClick={() => setMobileMenuOpen(false)}
+                        >
+                          Candidate Management
+                        </Link>
+                        <Link 
+                          to="/admin/analytics" 
+                          className="px-4 py-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800"
+                          onClick={() => setMobileMenuOpen(false)}
+                        >
+                          Analytics
+                        </Link>
+                      </>
+                    )}
+                  </>
+                )}
+              </div>
+              
+              {isLoggedIn ? (
+                <Button 
+                  variant="outline" 
+                  className="mt-6 w-full" 
+                  onClick={() => {
+                    handleLogout();
+                    setMobileMenuOpen(false);
+                  }}
                 >
-                  Results
-                </NavLink>
-              </>
-            )}
-            
-            {userType === 'voter' && (
-              <NavLink 
-                to="/vote" 
-                className={({isActive}) => cn(
-                  "block py-2.5 px-3 rounded-lg", 
-                  isActive ? "bg-primary/10 text-primary font-medium" : "text-foreground hover:bg-muted"
-                )}
-                onClick={toggleMobileMenu}
-              >
-                Vote
-              </NavLink>
-            )}
-            
-            {userType === 'candidate' && (
-              <NavLink 
-                to="/results" 
-                className={({isActive}) => cn(
-                  "block py-2.5 px-3 rounded-lg", 
-                  isActive ? "bg-primary/10 text-primary font-medium" : "text-foreground hover:bg-muted"
-                )}
-                onClick={toggleMobileMenu}
-              >
-                Results
-              </NavLink>
-            )}
-            
-            <NavLink 
-              to="/candidates" 
-              className={({isActive}) => cn(
-                "block py-2.5 px-3 rounded-lg", 
-                isActive ? "bg-primary/10 text-primary font-medium" : "text-foreground hover:bg-muted"
-              )}
-              onClick={toggleMobileMenu}
-            >
-              Candidates
-            </NavLink>
-            
-            <div className="pt-2 border-t border-border/50">
-              {userType === 'none' ? (
-                <Button onClick={() => { handleLogin(); toggleMobileMenu(); }} className="w-full btn-primary">
-                  Log In
+                  <LogOut className="mr-2 h-4 w-4" />
+                  Log out
                 </Button>
               ) : (
-                <Button 
-                  onClick={() => { handleLogout(); toggleMobileMenu(); }} 
-                  variant="outline" 
-                  className="w-full flex items-center justify-center space-x-2 text-destructive border-destructive/20 hover:bg-destructive/10"
-                >
-                  <LogOut className="h-4 w-4 mr-2" />
-                  <span>Log Out</span>
-                </Button>
+                <div className="mt-6 grid gap-2">
+                  <Button 
+                    variant="outline" 
+                    onClick={() => {
+                      navigate('/login');
+                      setMobileMenuOpen(false);
+                    }}
+                  >
+                    Log in
+                  </Button>
+                  <Button 
+                    onClick={() => {
+                      navigate('/signup');
+                      setMobileMenuOpen(false);
+                    }}
+                  >
+                    Sign up
+                  </Button>
+                </div>
               )}
-            </div>
+            </SheetContent>
+          </Sheet>
+        </div>
+        
+        <div className="hidden w-full md:flex md:w-auto md:order-1">
+          <div className="flex space-x-8 rtl:space-x-reverse">
+            <Link to="/" className="py-2 text-gray-900 dark:text-white hover:text-primary">
+              Home
+            </Link>
+            
+            {isLoggedIn && (
+              <>
+                <Link to="/dashboard" className="py-2 text-gray-900 dark:text-white hover:text-primary">
+                  Dashboard
+                </Link>
+                <Link to="/vote" className="py-2 text-gray-900 dark:text-white hover:text-primary">
+                  Vote
+                </Link>
+                <Link to="/candidates" className="py-2 text-gray-900 dark:text-white hover:text-primary">
+                  Candidates
+                </Link>
+                <Link to="/results" className="py-2 text-gray-900 dark:text-white hover:text-primary">
+                  Results
+                </Link>
+              </>
+            )}
           </div>
         </div>
-      )}
-    </header>
+      </div>
+    </nav>
   );
 };
 

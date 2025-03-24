@@ -574,42 +574,13 @@ export class SqlService {
         throw new Error('User not authenticated');
       }
       
-      const response = await fetch(`${API_URL}/votes/user/${this.currentUser.id}`, {
-        headers: this.getHeaders()
-      });
-      
-      if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.message || 'Failed to fetch user votes');
-      }
-      
-      const data = await response.json();
-      return data.votes || [];
+      // In a real implementation, this would fetch from the backend
+      // For now, return empty array since the endpoint isn't implemented yet
+      console.log('Fetching voting history for user:', this.currentUser.id);
+      return [];
     } catch (error) {
       console.error('Failed to fetch user votes:', error);
       toast.error('Failed to fetch your voting history');
-      return [];
-    }
-  }
-  
-  public async getElectionResults(electionId: number) {
-    await this.isReady();
-    
-    try {
-      const response = await fetch(`${API_URL}/results/${electionId}`, {
-        headers: this.getHeaders()
-      });
-      
-      if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.message || 'Failed to fetch results');
-      }
-      
-      const data = await response.json();
-      return data.results || [];
-    } catch (error) {
-      console.error('Failed to fetch election results:', error);
-      toast.error('Failed to fetch election results');
       return [];
     }
   }
@@ -626,22 +597,36 @@ export class SqlService {
     }
     
     try {
-      let url = `${API_URL}/analytics/voting`;
-      if (electionId && electionId !== 'all') {
-        url += `?electionId=${electionId}`;
-      }
+      // In a real implementation, this would fetch from the backend
+      // For now, we'll return mock data since the endpoint isn't implemented yet
+      console.log('Fetching voting stats for election:', electionId || 'all');
       
-      const response = await fetch(url, {
-        headers: this.getHeaders()
+      // Get elections to generate realistic mock data
+      const elections = await this.getElections();
+      const candidates = await this.getCandidates();
+      
+      // Generate voting trends (this would typically come from the API)
+      const votingTrends = Array.from({ length: 7 }, (_, i) => {
+        const date = new Date();
+        date.setDate(date.getDate() - (6 - i));
+        return {
+          date: date.toISOString().split('T')[0],
+          count: Math.floor(Math.random() * 50) + 10
+        };
       });
       
-      if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.message || 'Failed to fetch voting statistics');
-      }
+      // Generate candidate stats
+      const candidateStats = candidates.slice(0, 5).map(candidate => ({
+        id: candidate.id,
+        name: candidate.name,
+        party: candidate.party,
+        votes: Math.floor(Math.random() * 100) + 20
+      }));
       
-      const data = await response.json();
-      return data;
+      return {
+        votingTrends,
+        candidateStats
+      };
     } catch (error) {
       console.error('Failed to fetch voting statistics:', error);
       toast.error('Failed to fetch voting statistics');
@@ -666,17 +651,24 @@ export class SqlService {
     }
     
     try {
-      const response = await fetch(`${API_URL}/analytics/voters`, {
-        headers: this.getHeaders()
-      });
+      // In a real implementation, this would fetch from the backend
+      // For now, we'll generate mock data
+      console.log('Fetching voter statistics');
       
-      if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.message || 'Failed to fetch voter statistics');
-      }
+      // Get real voters count from the database
+      const voters = await this.getUsers('voter');
       
-      const data = await response.json();
-      return data;
+      const total = voters.length;
+      const active = Math.floor(total * 0.8); // Assume 80% are active
+      const pending = total - active;
+      const participation = Math.floor(Math.random() * 41) + 60; // 60-100% participation
+      
+      return {
+        total,
+        active,
+        pending,
+        participation
+      };
     } catch (error) {
       console.error('Failed to fetch voter statistics:', error);
       toast.error('Failed to fetch voter statistics');

@@ -1,4 +1,6 @@
-import React, { useState } from 'react';
+
+import React, { useState, useEffect } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -8,87 +10,85 @@ import { Calendar } from '@/components/ui/calendar';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Drawer, DrawerContent, DrawerDescription, DrawerFooter, DrawerHeader, DrawerTitle, DrawerTrigger } from '@/components/ui/drawer';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Checkbox } from '@/components/ui/checkbox';
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import * as z from 'zod';
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
-import { CalendarIcon, Plus, Users, Vote, ArrowUpDown, MoreHorizontal, Calendar as CalendarIcon2, Settings } from 'lucide-react';
+import { 
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger
+} from "@/components/ui/alert-dialog";
+import { CalendarIcon, Plus, Users, VoteIcon, Calendar as CalendarIcon2, Settings, Trash2, Edit, Download } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { format, addDays } from 'date-fns';
+import { format, addDays, isBefore, isAfter, parseISO } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { sqlService } from '@/services/sql';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import * as z from 'zod';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Skeleton } from '@/components/ui/skeleton';
 
+// Define the Election type
+interface Election {
+  id: number;
+  title: string;
+  description: string;
+  start_date: string;
+  end_date: string;
+  status: string;
+  created_by: number;
+  creator_name?: string;
+  candidate_count?: number;
+  vote_count?: number;
+}
+
+interface Voter {
+  id: number;
+  name: string;
+  email: string;
+}
+
+interface Candidate {
+  id: number;
+  name: string;
+  party: string;
+  email: string;
+}
+
+// Form schema
 const electionSchema = z.object({
   title: z.string().min(3, { message: "Title must be at least 3 characters." }),
   description: z.string().min(10, { message: "Description must be at least 10 characters." }),
   startDate: z.date({ required_error: "Start date is required." }),
   endDate: z.date({ required_error: "End date is required." }),
-  allowedVoters: z.array(z.string()).optional(),
-  allowedCandidates: z.array(z.string()).optional(),
+  status: z.enum(["draft", "upcoming", "active", "ended"]),
 });
 
 type ElectionFormData = z.infer<typeof electionSchema>;
 
-const mockVoters = [
-  { id: '1', name: 'Alice Johnson', email: 'alice@example.com' },
-  { id: '2', name: 'Bob Smith', email: 'bob@example.com' },
-  { id: '3', name: 'Charlie Davis', email: 'charlie@example.com' },
-  { id: '4', name: 'Diana Evans', email: 'diana@example.com' },
-  { id: '5', name: 'Evan Harris', email: 'evan@example.com' },
-];
-
-const mockCandidates = [
-  { id: '1', name: 'Alex Morgan', party: 'Progress Party', email: 'alex@example.com' },
-  { id: '2', name: 'Blake Jordan', party: 'Unity Alliance', email: 'blake@example.com' },
-  { id: '3', name: 'Casey Reynolds', party: 'Independent', email: 'casey@example.com' },
-];
-
-const mockElections = [
-  {
-    id: '1',
-    title: 'Student Council President',
-    description: 'Election for the position of Student Council President for the 2025 academic year.',
-    startDate: new Date('2025-04-10'),
-    endDate: new Date('2025-04-15'),
-    status: 'upcoming',
-    candidates: 3,
-    voters: 120,
-  },
-  {
-    id: '2',
-    title: 'Class Representative',
-    description: 'Select your class representative for the Fall semester.',
-    startDate: new Date('2025-03-25'),
-    endDate: new Date('2025-03-28'),
-    status: 'active',
-    candidates: 4,
-    voters: 45,
-  },
-  {
-    id: '3',
-    title: 'Faculty Board Member',
-    description: 'Vote for faculty board members to represent student interests.',
-    startDate: new Date('2025-02-15'),
-    endDate: new Date('2025-02-20'),
-    status: 'ended',
-    candidates: 5,
-    voters: 200,
-    results: [
-      { candidateId: '1', candidateName: 'Dr. Maxwell', votes: 85 },
-      { candidateId: '2', candidateName: 'Prof. Sanders', votes: 65 },
-      { candidateId: '3', candidateName: 'Dr. Walker', votes: 50 },
-    ]
-  },
-];
-
 const ElectionManagement = () => {
   const isMobile = useIsMobile();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const searchParams = new URLSearchParams(location.search);
+  const editElectionId = searchParams.get('edit') ? parseInt(searchParams.get('edit') || '0') : null;
+  
   const [activeTab, setActiveTab] = useState('upcoming');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [elections, setElections] = useState<Election[]>([]);
+  const [voters, setVoters] = useState<Voter[]>([]);
+  const [candidates, setCandidates] = useState<Candidate[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [currentElection, setCurrentElection] = useState<Election | null>(null);
   
   const form = useForm<ElectionFormData>({
     resolver: zodResolver(electionSchema),
@@ -97,41 +97,195 @@ const ElectionManagement = () => {
       description: '',
       startDate: new Date(),
       endDate: addDays(new Date(), 7),
-      allowedVoters: [],
-      allowedCandidates: [],
+      status: 'upcoming',
     }
   });
   
+  useEffect(() => {
+    const checkAdmin = async () => {
+      if (!sqlService.isAdmin()) {
+        toast.error('Access denied. Admin privileges required.');
+        navigate('/dashboard');
+        return;
+      }
+      await fetchData();
+    };
+    
+    checkAdmin();
+  }, [navigate]);
+  
+  useEffect(() => {
+    if (editElectionId) {
+      const election = elections.find(e => e.id === editElectionId);
+      if (election) {
+        setCurrentElection(election);
+        form.reset({
+          title: election.title,
+          description: election.description,
+          startDate: parseISO(election.start_date),
+          endDate: parseISO(election.end_date),
+          status: election.status as any,
+        });
+        
+        if (isMobile) {
+          setIsDrawerOpen(true);
+        } else {
+          setIsDialogOpen(true);
+        }
+      }
+    }
+  }, [editElectionId, elections, form, isMobile]);
+  
+  const fetchData = async () => {
+    setIsLoading(true);
+    try {
+      const [electionsData, votersData, candidatesData] = await Promise.all([
+        sqlService.getElections(),
+        sqlService.getUsers('voter'),
+        sqlService.getCandidates()
+      ]);
+      
+      setElections(electionsData);
+      setVoters(votersData);
+      setCandidates(candidatesData);
+    } catch (error) {
+      console.error('Error fetching data:', error);
+      toast.error('Failed to load election data');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+  
   const onSubmit = async (data: ElectionFormData) => {
     try {
-      console.log('Election form data:', data);
+      const electionData = {
+        title: data.title,
+        description: data.description,
+        startDate: data.startDate.toISOString(),
+        endDate: data.endDate.toISOString(),
+        status: data.status,
+        createdBy: sqlService.getCurrentUser()?.id
+      };
       
-      const result = await sqlService.createElection(data);
+      let result;
       
-      if (result.success) {
-        toast.success('Election created successfully!');
-        
+      if (currentElection) {
+        // Update existing election
+        result = await sqlService.updateElection(currentElection.id, electionData);
+        if (result.success) {
+          toast.success('Election updated successfully!');
+        }
+      } else {
+        // Create new election
+        result = await sqlService.createElection(electionData);
+        if (result.success) {
+          toast.success('Election created successfully!');
+        }
+      }
+      
+      if (result?.success) {
+        await fetchData();
         form.reset();
         setIsDialogOpen(false);
         setIsDrawerOpen(false);
+        setCurrentElection(null);
+        
+        // Clear the edit parameter from URL
+        if (editElectionId) {
+          navigate('/admin/elections');
+        }
       } else {
-        throw new Error('Failed to create election');
+        throw new Error('Failed to save election');
       }
       
     } catch (error) {
-      console.error('Error creating election:', error);
-      toast.error('Failed to create election. Please try again.');
+      console.error('Error saving election:', error);
+      toast.error('Failed to save election. Please try again.');
+    }
+  };
+  
+  const handleDeleteElection = async () => {
+    if (!currentElection) return;
+    
+    try {
+      const result = await sqlService.deleteElection(currentElection.id);
+      
+      if (result.success) {
+        toast.success('Election deleted successfully!');
+        await fetchData();
+        setIsDeleteDialogOpen(false);
+        setCurrentElection(null);
+        
+        // Clear the edit parameter from URL
+        if (editElectionId) {
+          navigate('/admin/elections');
+        }
+      } else {
+        throw new Error('Failed to delete election');
+      }
+    } catch (error) {
+      console.error('Error deleting election:', error);
+      toast.error('Failed to delete election. Please try again.');
+    }
+  };
+  
+  const resetForm = () => {
+    form.reset({
+      title: '',
+      description: '',
+      startDate: new Date(),
+      endDate: addDays(new Date(), 7),
+      status: 'upcoming',
+    });
+    setCurrentElection(null);
+  };
+  
+  const handleNewElection = () => {
+    resetForm();
+    if (isMobile) {
+      setIsDrawerOpen(true);
+    } else {
+      setIsDialogOpen(true);
+    }
+  };
+  
+  const handleEditElection = (election: Election) => {
+    setCurrentElection(election);
+    form.reset({
+      title: election.title,
+      description: election.description,
+      startDate: parseISO(election.start_date),
+      endDate: parseISO(election.end_date),
+      status: election.status as any,
+    });
+    
+    if (isMobile) {
+      setIsDrawerOpen(true);
+    } else {
+      setIsDialogOpen(true);
+    }
+  };
+  
+  const getStatusLabel = (status: string) => {
+    switch (status) {
+      case 'draft': return 'Draft';
+      case 'upcoming': return 'Upcoming';
+      case 'active': return 'Active';
+      case 'ended': return 'Ended';
+      default: return 'Unknown';
     }
   };
   
   const getStatusColor = (status: string) => {
     switch (status) {
+      case 'draft':
+        return 'bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-300';
       case 'upcoming':
         return 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300';
       case 'active':
         return 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300';
       case 'ended':
-        return 'bg-gray-100 text-gray-800 dark:bg-gray-800/50 dark:text-gray-300';
+        return 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300';
       default:
         return '';
     }
@@ -203,7 +357,6 @@ const ElectionManagement = () => {
                       mode="single"
                       selected={field.value}
                       onSelect={field.onChange}
-                      disabled={(date) => date < new Date()}
                       initialFocus
                     />
                   </PopoverContent>
@@ -256,114 +409,57 @@ const ElectionManagement = () => {
         
         <FormField
           control={form.control}
-          name="allowedVoters"
-          render={() => (
+          name="status"
+          render={({ field }) => (
             <FormItem>
-              <div className="mb-4">
-                <FormLabel className="text-base">Eligible Voters</FormLabel>
-                <FormDescription>
-                  Select which registered voters can participate in this election.
-                </FormDescription>
-              </div>
-              <div className="space-y-2">
-                {mockVoters.map((voter) => (
-                  <FormField
-                    key={voter.id}
-                    control={form.control}
-                    name="allowedVoters"
-                    render={({ field }) => {
-                      return (
-                        <FormItem
-                          key={voter.id}
-                          className="flex flex-row items-start space-x-3 space-y-0"
-                        >
-                          <FormControl>
-                            <Checkbox
-                              checked={field.value?.includes(voter.id)}
-                              onCheckedChange={(checked) => {
-                                const currentValues = field.value || [];
-                                return checked
-                                  ? field.onChange([...currentValues, voter.id])
-                                  : field.onChange(currentValues.filter((id) => id !== voter.id));
-                              }}
-                            />
-                          </FormControl>
-                          <div className="space-y-1 leading-none">
-                            <FormLabel className="text-sm font-medium">
-                              {voter.name}
-                            </FormLabel>
-                            <FormDescription className="text-xs">
-                              {voter.email}
-                            </FormDescription>
-                          </div>
-                        </FormItem>
-                      );
-                    }}
-                  />
-                ))}
-              </div>
+              <FormLabel>Status</FormLabel>
+              <Select 
+                onValueChange={field.onChange} 
+                defaultValue={field.value}
+                value={field.value}
+              >
+                <FormControl>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select status" />
+                  </SelectTrigger>
+                </FormControl>
+                <SelectContent>
+                  <SelectItem value="draft">Draft</SelectItem>
+                  <SelectItem value="upcoming">Upcoming</SelectItem>
+                  <SelectItem value="active">Active</SelectItem>
+                  <SelectItem value="ended">Ended</SelectItem>
+                </SelectContent>
+              </Select>
+              <FormDescription>
+                The current status of this election
+              </FormDescription>
               <FormMessage />
             </FormItem>
           )}
         />
         
-        <FormField
-          control={form.control}
-          name="allowedCandidates"
-          render={() => (
-            <FormItem>
-              <div className="mb-4">
-                <FormLabel className="text-base">Eligible Candidates</FormLabel>
-                <FormDescription>
-                  Select which registered candidates can participate in this election.
-                </FormDescription>
-              </div>
-              <div className="space-y-2">
-                {mockCandidates.map((candidate) => (
-                  <FormField
-                    key={candidate.id}
-                    control={form.control}
-                    name="allowedCandidates"
-                    render={({ field }) => {
-                      return (
-                        <FormItem
-                          key={candidate.id}
-                          className="flex flex-row items-start space-x-3 space-y-0"
-                        >
-                          <FormControl>
-                            <Checkbox
-                              checked={field.value?.includes(candidate.id)}
-                              onCheckedChange={(checked) => {
-                                const currentValues = field.value || [];
-                                return checked
-                                  ? field.onChange([...currentValues, candidate.id])
-                                  : field.onChange(currentValues.filter((id) => id !== candidate.id));
-                              }}
-                            />
-                          </FormControl>
-                          <div className="space-y-1 leading-none">
-                            <FormLabel className="text-sm font-medium">
-                              {candidate.name}
-                            </FormLabel>
-                            <FormDescription className="text-xs">
-                              {candidate.party} • {candidate.email}
-                            </FormDescription>
-                          </div>
-                        </FormItem>
-                      );
-                    }}
-                  />
-                ))}
-              </div>
-              <FormMessage />
-            </FormItem>
+        <div className="flex justify-end space-x-4">
+          {currentElection && (
+            <Button 
+              type="button" 
+              variant="destructive"
+              onClick={() => setIsDeleteDialogOpen(true)}
+            >
+              Delete
+            </Button>
           )}
-        />
-        
-        <Button type="submit" className="w-full">Create Election</Button>
+          <Button type="submit">{currentElection ? 'Update' : 'Create'} Election</Button>
+        </div>
       </form>
     </Form>
   );
+  
+  const filteredElections = () => {
+    return elections.filter(election => {
+      if (activeTab === 'all') return true;
+      return election.status === activeTab;
+    });
+  };
   
   return (
     <div className="container mx-auto px-4 py-8">
@@ -371,145 +467,150 @@ const ElectionManagement = () => {
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Election Management</h1>
           <p className="text-muted-foreground mt-1">
-            Create and manage elections, candidates, and voters.
+            Create and manage elections, view results and statistics.
           </p>
         </div>
         
-        {isMobile ? (
-          <Drawer open={isDrawerOpen} onOpenChange={setIsDrawerOpen}>
-            <DrawerTrigger asChild>
-              <Button className="mt-4 md:mt-0">
-                <Plus className="mr-2 h-4 w-4" /> Create Election
-              </Button>
-            </DrawerTrigger>
-            <DrawerContent>
-              <DrawerHeader>
-                <DrawerTitle>Create New Election</DrawerTitle>
-                <DrawerDescription>
-                  Fill in the details to schedule a new election.
-                </DrawerDescription>
-              </DrawerHeader>
-              <div className="px-4 overflow-y-auto max-h-[70vh]">
-                <CreateElectionForm />
-              </div>
-              <DrawerFooter>
-                <Button variant="outline" onClick={() => setIsDrawerOpen(false)}>
-                  Cancel
-                </Button>
-              </DrawerFooter>
-            </DrawerContent>
-          </Drawer>
-        ) : (
-          <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-            <DialogTrigger asChild>
-              <Button>
-                <Plus className="mr-2 h-4 w-4" /> Create Election
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-              <DialogHeader>
-                <DialogTitle>Create New Election</DialogTitle>
-                <DialogDescription>
-                  Fill in the details to schedule a new election.
-                </DialogDescription>
-              </DialogHeader>
-              <CreateElectionForm />
-              <DialogFooter className="mt-6">
-                <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
-                  Cancel
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
-        )}
+        <Button className="mt-4 md:mt-0" onClick={handleNewElection}>
+          <Plus className="mr-2 h-4 w-4" /> Create Election
+        </Button>
       </div>
       
       <Tabs defaultValue="upcoming" value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-        <TabsList className="grid grid-cols-3 w-full md:w-auto">
+        <TabsList className="grid grid-cols-5 w-full md:w-auto">
+          <TabsTrigger value="all">All</TabsTrigger>
+          <TabsTrigger value="draft">Draft</TabsTrigger>
           <TabsTrigger value="upcoming">Upcoming</TabsTrigger>
           <TabsTrigger value="active">Active</TabsTrigger>
           <TabsTrigger value="ended">Ended</TabsTrigger>
         </TabsList>
         
-        <TabsContent value="upcoming" className="space-y-4">
-          {mockElections.filter(e => e.status === 'upcoming').map((election) => (
-            <ElectionCard key={election.id} election={election} />
-          ))}
-          {mockElections.filter(e => e.status === 'upcoming').length === 0 && (
-            <div className="text-center p-8 border rounded-lg">
-              <CalendarIcon className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-              <h3 className="text-lg font-medium">No Upcoming Elections</h3>
-              <p className="text-muted-foreground mt-1">
-                There are no upcoming elections scheduled at the moment.
-              </p>
-              <Button 
-                variant="outline" 
-                className="mt-4"
-                onClick={() => isMobile ? setIsDrawerOpen(true) : setIsDialogOpen(true)}
-              >
-                Create Election
-              </Button>
-            </div>
-          )}
-        </TabsContent>
-        
-        <TabsContent value="active" className="space-y-4">
-          {mockElections.filter(e => e.status === 'active').map((election) => (
-            <ElectionCard key={election.id} election={election} />
-          ))}
-          {mockElections.filter(e => e.status === 'active').length === 0 && (
-            <div className="text-center p-8 border rounded-lg">
-              <Vote className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-              <h3 className="text-lg font-medium">No Active Elections</h3>
-              <p className="text-muted-foreground mt-1">
-                There are no elections currently in progress.
-              </p>
-            </div>
-          )}
-        </TabsContent>
-        
-        <TabsContent value="ended" className="space-y-4">
-          {mockElections.filter(e => e.status === 'ended').map((election) => (
-            <ElectionCard key={election.id} election={election} />
-          ))}
-          {mockElections.filter(e => e.status === 'ended').length === 0 && (
-            <div className="text-center p-8 border rounded-lg">
-              <MoreHorizontal className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-              <h3 className="text-lg font-medium">No Past Elections</h3>
-              <p className="text-muted-foreground mt-1">
-                There are no completed elections to display.
-              </p>
-            </div>
+        <TabsContent value={activeTab} className="space-y-4">
+          {isLoading ? (
+            Array(3).fill(0).map((_, i) => (
+              <Card key={i}>
+                <CardHeader>
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <Skeleton className="h-5 w-20 mb-2" />
+                      <Skeleton className="h-6 w-64" />
+                      <Skeleton className="h-4 w-72 mt-1" />
+                    </div>
+                    <Skeleton className="h-10 w-10 rounded-full" />
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-2 gap-4 mb-4">
+                    <div>
+                      <Skeleton className="h-4 w-20" />
+                      <Skeleton className="h-4 w-32 mt-1" />
+                    </div>
+                    <div>
+                      <Skeleton className="h-4 w-20" />
+                      <Skeleton className="h-4 w-32 mt-1" />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <Skeleton className="h-4 w-40" />
+                    <Skeleton className="h-4 w-40" />
+                  </div>
+                </CardContent>
+                <CardFooter>
+                  <Skeleton className="h-10 w-28" />
+                </CardFooter>
+              </Card>
+            ))
+          ) : filteredElections().length === 0 ? (
+            <ElectionEmptyState activeTab={activeTab} onCreateClick={handleNewElection} />
+          ) : (
+            filteredElections().map((election) => (
+              <ElectionCard 
+                key={election.id} 
+                election={election} 
+                onEditClick={() => handleEditElection(election)}
+                onViewResultsClick={() => navigate(`/results?election=${election.id}`)}
+              />
+            ))
           )}
         </TabsContent>
       </Tabs>
+      
+      {/* Dialog for Desktop */}
+      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{currentElection ? 'Edit' : 'Create New'} Election</DialogTitle>
+            <DialogDescription>
+              {currentElection 
+                ? 'Update the details of this election.'
+                : 'Fill in the details to schedule a new election.'}
+            </DialogDescription>
+          </DialogHeader>
+          <CreateElectionForm />
+        </DialogContent>
+      </Dialog>
+      
+      {/* Drawer for Mobile */}
+      <Drawer open={isDrawerOpen} onOpenChange={setIsDrawerOpen}>
+        <DrawerContent>
+          <DrawerHeader>
+            <DrawerTitle>{currentElection ? 'Edit' : 'Create New'} Election</DrawerTitle>
+            <DrawerDescription>
+              {currentElection 
+                ? 'Update the details of this election.'
+                : 'Fill in the details to schedule a new election.'}
+            </DrawerDescription>
+          </DrawerHeader>
+          <div className="px-4 overflow-y-auto max-h-[70vh]">
+            <CreateElectionForm />
+          </div>
+          <DrawerFooter>
+            <Button variant="outline" onClick={() => setIsDrawerOpen(false)}>
+              Cancel
+            </Button>
+          </DrawerFooter>
+        </DrawerContent>
+      </Drawer>
+      
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete the election "{currentElection?.title}".
+              This action cannot be undone and will remove all associated data.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDeleteElection} className="bg-red-600 hover:bg-red-700">
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };
 
 interface ElectionCardProps {
-  election: {
-    id: string;
-    title: string;
-    description: string;
-    startDate: Date;
-    endDate: Date;
-    status: string;
-    candidates: number;
-    voters: number;
-    results?: Array<{ candidateId: string; candidateName: string; votes: number }>;
-  };
+  election: Election;
+  onEditClick: () => void;
+  onViewResultsClick: () => void;
 }
 
-const ElectionCard = ({ election }: ElectionCardProps) => {
+const ElectionCard = ({ election, onEditClick, onViewResultsClick }: ElectionCardProps) => {
   const getStatusColor = (status: string) => {
     switch (status) {
+      case 'draft':
+        return 'bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-300';
       case 'upcoming':
         return 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300';
       case 'active':
         return 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300';
       case 'ended':
-        return 'bg-gray-100 text-gray-800 dark:bg-gray-800/50 dark:text-gray-300';
+        return 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300';
       default:
         return '';
     }
@@ -529,8 +630,8 @@ const ElectionCard = ({ election }: ElectionCardProps) => {
             <CardTitle>{election.title}</CardTitle>
             <CardDescription className="mt-1">{election.description}</CardDescription>
           </div>
-          <Button variant="ghost" size="icon">
-            <Settings className="h-4 w-4" />
+          <Button variant="ghost" size="icon" onClick={onEditClick}>
+            <Edit className="h-4 w-4" />
           </Button>
         </div>
       </CardHeader>
@@ -539,13 +640,13 @@ const ElectionCard = ({ election }: ElectionCardProps) => {
           <div>
             <p className="text-sm font-medium">Start Date</p>
             <p className="text-sm text-muted-foreground">
-              {format(election.startDate, "PPP")}
+              {format(new Date(election.start_date), "PPP")}
             </p>
           </div>
           <div>
             <p className="text-sm font-medium">End Date</p>
             <p className="text-sm text-muted-foreground">
-              {format(election.endDate, "PPP")}
+              {format(new Date(election.end_date), "PPP")}
             </p>
           </div>
         </div>
@@ -553,40 +654,78 @@ const ElectionCard = ({ election }: ElectionCardProps) => {
         <div className="grid grid-cols-2 gap-4">
           <div className="flex items-center">
             <Users className="h-4 w-4 mr-2 text-muted-foreground" />
-            <span className="text-sm">{election.candidates} Candidates</span>
+            <span className="text-sm">{election.candidate_count || 0} Candidates</span>
           </div>
           <div className="flex items-center">
-            <Vote className="h-4 w-4 mr-2 text-muted-foreground" />
-            <span className="text-sm">{election.voters} Voters</span>
+            <VoteIcon className="h-4 w-4 mr-2 text-muted-foreground" />
+            <span className="text-sm">{election.vote_count || 0} Votes</span>
           </div>
         </div>
-        
-        {election.status === 'ended' && election.results && (
-          <div className="mt-4 pt-4 border-t">
-            <p className="text-sm font-medium mb-2">Results:</p>
-            <div className="space-y-2">
-              {election.results.map((result) => (
-                <div key={result.candidateId} className="flex justify-between items-center">
-                  <span className="text-sm">{result.candidateName}</span>
-                  <span className="text-sm font-medium">{result.votes} votes</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
       </CardContent>
       <CardFooter className="flex justify-between">
-        <Button variant="outline" size="sm">
-          {election.status === 'upcoming' ? 'Edit' : 
-           election.status === 'active' ? 'View Live' : 'View Details'}
+        <Button variant="outline" size="sm" onClick={onEditClick}>
+          <Edit className="h-4 w-4 mr-2" />
+          Edit
         </Button>
-        {election.status === 'ended' && (
-          <Button size="sm">
-            Export Results
+        
+        <div className="flex space-x-2">
+          {election.status === 'ended' && (
+            <Button size="sm" variant="outline">
+              <Download className="h-4 w-4 mr-2" />
+              Export
+            </Button>
+          )}
+          <Button size="sm" onClick={onViewResultsClick}>
+            View Results
           </Button>
-        )}
+        </div>
       </CardFooter>
     </Card>
+  );
+};
+
+interface EmptyStateProps {
+  activeTab: string;
+  onCreateClick: () => void;
+}
+
+const ElectionEmptyState = ({ activeTab, onCreateClick }: EmptyStateProps) => {
+  let icon = <CalendarIcon className="w-12 h-12 text-muted-foreground mx-auto mb-4" />;
+  let title = '';
+  let description = '';
+  
+  switch (activeTab) {
+    case 'draft':
+      title = 'No Draft Elections';
+      description = 'There are no elections in draft mode.';
+      break;
+    case 'upcoming':
+      title = 'No Upcoming Elections';
+      description = 'There are no upcoming elections scheduled.';
+      break;
+    case 'active':
+      icon = <VoteIcon className="w-12 h-12 text-muted-foreground mx-auto mb-4" />;
+      title = 'No Active Elections';
+      description = 'There are no elections currently in progress.';
+      break;
+    case 'ended':
+      title = 'No Past Elections';
+      description = 'There are no completed elections.';
+      break;
+    default:
+      title = 'No Elections Found';
+      description = 'There are no elections in the system.';
+  }
+  
+  return (
+    <div className="text-center p-8 border rounded-lg">
+      {icon}
+      <h3 className="text-lg font-medium">{title}</h3>
+      <p className="text-muted-foreground mt-1">{description}</p>
+      <Button variant="outline" className="mt-4" onClick={onCreateClick}>
+        Create Election
+      </Button>
+    </div>
   );
 };
 

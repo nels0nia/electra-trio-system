@@ -1,310 +1,309 @@
+
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Card } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import Navbar from '@/components/Navbar';
-import Footer from '@/components/Footer';
-import VoteCard from '@/components/VoteCard';
-import { Calendar, Vote as VoteIcon, CheckCircle } from 'lucide-react';
-import { toast } from 'sonner';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { Label } from '@/components/ui/label';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Helmet } from 'react-helmet';
+import { AlertCircle, Check, ThumbsUp } from 'lucide-react';
 import { sqlService } from '@/services/sql';
-import { encryptVote } from '@/utils/cryptoUtils';
+import { Skeleton } from '@/components/ui/skeleton';
+import { toast } from 'sonner';
+
+interface Candidate {
+  id: number;
+  name: string;
+  party: string;
+  platform: string;
+  bio: string;
+  profile_image?: string;
+  email: string;
+}
+
+interface Election {
+  id: number;
+  title: string;
+  description: string;
+  start_date: string;
+  end_date: string;
+  status: string;
+}
 
 const Vote = () => {
   const navigate = useNavigate();
-  const [completedElections, setCompletedElections] = useState<string[]>([]);
-  const [activeElections, setActiveElections] = useState<any[]>([]);
-  const [upcomingElections, setUpcomingElections] = useState<any[]>([]);
-  const [pastElections, setPastElections] = useState<any[]>([]);
-  const [candidates, setCandidates] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-  
+  const [activeElections, setActiveElections] = useState<Election[]>([]);
+  const [selectedElection, setSelectedElection] = useState<number | null>(null);
+  const [candidates, setCandidates] = useState<Candidate[]>([]);
+  const [selectedCandidate, setSelectedCandidate] = useState<number | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isSuccess, setIsSuccess] = useState(false);
+  const [hasVoted, setHasVoted] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const currentUser = sqlService.getCurrentUser();
+
   useEffect(() => {
-    const currentUser = sqlService.getCurrentUser();
-    if (!currentUser || (currentUser.role !== 'voter' && currentUser.role !== 'candidate')) {
-      toast.error('Unauthorized access. Please log in as voter or candidate.');
+    if (!currentUser) {
       navigate('/login');
-    } else {
-      loadElections();
-      loadCandidates();
-      loadCompletedElections();
+      return;
     }
-  }, [navigate]);
-  
-  const loadElections = async () => {
-    setLoading(true);
+
+    fetchElectionsAndVotes();
+  }, [navigate, currentUser]);
+
+  const fetchElectionsAndVotes = async () => {
+    setIsLoading(true);
     try {
-      const allElections = await sqlService.getElections();
+      // Fetch active elections
+      const electionsData = await sqlService.getElections();
+      const now = new Date();
+      const active = electionsData.filter(
+        (election: Election) => 
+          new Date(election.start_date) <= now && 
+          new Date(election.end_date) >= now &&
+          election.status === 'active'
+      );
       
-      if (allElections) {
-        setActiveElections(allElections.filter(e => e.status === 'active') || []);
-        setUpcomingElections(allElections.filter(e => e.status === 'upcoming') || []);
-        setPastElections(allElections.filter(e => e.status === 'ended') || []);
+      setActiveElections(active);
+      
+      if (active.length > 0) {
+        setSelectedElection(active[0].id);
+        
+        // Fetch candidates for the first election
+        const candidatesData = await sqlService.getCandidates(active[0].id);
+        setCandidates(candidatesData);
+        
+        // Check if user has already voted in this election
+        const votes = await sqlService.getUserVotes();
+        const hasAlreadyVoted = votes.some((vote: any) => vote.election_id === active[0].id);
+        setHasVoted(hasAlreadyVoted);
       }
     } catch (error) {
-      console.error('Failed to load elections:', error);
-      toast.error('Failed to load elections. Please try again.');
+      console.error('Error fetching elections data:', error);
+      toast.error('Failed to load elections data');
     } finally {
-      setLoading(false);
+      setIsLoading(false);
     }
   };
-  
-  const loadCandidates = async () => {
+
+  const handleElectionChange = async (electionId: string) => {
+    const electionIdNum = parseInt(electionId);
+    setSelectedElection(electionIdNum);
+    setSelectedCandidate(null);
+    
     try {
-      const allCandidates = await sqlService.getCandidates();
-      setCandidates(allCandidates || []);
-    } catch (error) {
-      console.error('Failed to load candidates:', error);
-      toast.error('Failed to load candidates. Please try again.');
-    }
-  };
-  
-  const loadCompletedElections = async () => {
-    try {
-      const userVotes = await sqlService.getUserVotes();
-      if (userVotes) {
-        const electionIds = userVotes.map(vote => vote.election_id.toString());
-        setCompletedElections(electionIds);
-      }
-    } catch (error) {
-      console.error('Failed to load completed elections:', error);
-    }
-  };
-  
-  const handleVote = async (electionId: string, candidateId: string) => {
-    try {
-      const currentUser = sqlService.getCurrentUser();
-      if (!currentUser) {
-        toast.error('You must be logged in to vote');
-        return;
-      }
+      // Fetch candidates for the selected election
+      const candidatesData = await sqlService.getCandidates(electionIdNum);
+      setCandidates(candidatesData);
       
-      const voteData = {
+      // Check if user has already voted in this election
+      const votes = await sqlService.getUserVotes();
+      const hasAlreadyVoted = votes.some((vote: any) => vote.election_id === electionIdNum);
+      setHasVoted(hasAlreadyVoted);
+    } catch (error) {
+      console.error('Error fetching candidates:', error);
+      toast.error('Failed to load candidates');
+    }
+  };
+
+  const handleVote = async () => {
+    if (!selectedElection || !selectedCandidate || !currentUser) return;
+    
+    setIsSubmitting(true);
+    try {
+      const result = await sqlService.castVote({
         voterId: currentUser.id,
-        candidateId: parseInt(candidateId),
-        electionId: parseInt(electionId)
-      };
-      
-      const encryptedVote = encryptVote(voteData);
-      
-      const result = await sqlService.castVote(voteData);
+        candidateId: selectedCandidate,
+        electionId: selectedElection
+      });
       
       if (result.success) {
-        setCompletedElections([...completedElections, electionId]);
-        toast.success('Your vote has been securely recorded!');
+        setIsSuccess(true);
+        setHasVoted(true);
+        toast.success('Your vote has been cast successfully!');
       } else {
         throw new Error(result.error || 'Failed to cast vote');
       }
     } catch (error) {
       console.error('Error casting vote:', error);
-      toast.error('Failed to cast vote. Please try again.');
+      toast.error(error instanceof Error ? error.message : 'Failed to cast vote');
+    } finally {
+      setIsSubmitting(false);
     }
   };
-  
-  const hasVoted = (electionId: string) => {
-    return completedElections.includes(electionId);
-  };
-  
-  const getElectionCandidates = (electionId: string) => {
-    return candidates.filter(candidate => candidate.election_id.toString() === electionId);
-  };
-  
-  return (
-    <div className="min-h-screen flex flex-col">
-      <Navbar />
-      
-      <main className="flex-1 pt-24 pb-16">
-        <div className="container px-4 md:px-6">
-          <div className="mb-8">
-            <h1 className="text-3xl font-bold">Vote</h1>
-            <p className="text-muted-foreground mt-1">
-              Cast your vote in active elections or view upcoming elections
-            </p>
-          </div>
-          
-          <Tabs defaultValue="active" className="w-full">
-            <TabsList className="grid grid-cols-1 md:grid-cols-3 mb-8">
-              <TabsTrigger value="active" className="flex items-center justify-center">
-                <VoteIcon className="h-4 w-4 mr-2" />
-                <span>Active</span>
-              </TabsTrigger>
-              <TabsTrigger value="upcoming" className="flex items-center justify-center">
-                <Calendar className="h-4 w-4 mr-2" />
-                <span>Upcoming</span>
-              </TabsTrigger>
-              <TabsTrigger value="completed" className="flex items-center justify-center">
-                <CheckCircle className="h-4 w-4 mr-2" />
-                <span>Completed</span>
-              </TabsTrigger>
-            </TabsList>
-            
-            <TabsContent value="active" className="animate-fade-in space-y-6">
-              {loading ? (
-                <Card className="glass-card p-8 text-center">
-                  <p className="text-muted-foreground">Loading elections...</p>
-                </Card>
-              ) : activeElections.length > 0 ? (
-                activeElections.map((election) => (
-                  <div key={election.id}>
-                    {hasVoted(election.id) ? (
-                      <Card className="glass-card p-6 text-center">
-                        <div className="py-8">
-                          <div className="bg-green-100 dark:bg-green-900/30 rounded-full w-20 h-20 mx-auto flex items-center justify-center mb-6">
-                            <CheckCircle className="h-10 w-10 text-green-600 dark:text-green-400" />
-                          </div>
-                          <h3 className="text-2xl font-medium mb-2">{election.title}</h3>
-                          <p className="text-muted-foreground mb-6 max-w-md mx-auto">
-                            You have successfully cast your vote in this election. Thank you for participating!
-                          </p>
-                        </div>
-                      </Card>
-                    ) : (
-                      <VoteCard
-                        election={election}
-                        candidates={getElectionCandidates(election.id)}
-                        onVote={handleVote}
-                      />
-                    )}
+
+  if (isLoading) {
+    return (
+      <div className="container mx-auto px-4 py-8">
+        <Helmet>
+          <title>Vote | VoteX</title>
+        </Helmet>
+        <h1 className="text-3xl font-bold mb-6">Cast Your Vote</h1>
+        <Card>
+          <CardHeader>
+            <Skeleton className="h-6 w-64" />
+            <Skeleton className="h-4 w-full mt-2" />
+          </CardHeader>
+          <CardContent className="space-y-8">
+            <div className="space-y-4">
+              {Array(3).fill(0).map((_, i) => (
+                <div key={i} className="flex items-start space-x-4 p-4 border rounded-lg">
+                  <Skeleton className="h-5 w-5 mt-0.5" />
+                  <div className="space-y-2 flex-1">
+                    <Skeleton className="h-5 w-40" />
+                    <Skeleton className="h-4 w-full" />
                   </div>
-                ))
-              ) : (
-                <Card className="glass-card p-8 text-center">
-                  <p className="text-muted-foreground">There are no active elections at this time.</p>
-                </Card>
-              )}
-            </TabsContent>
-            
-            <TabsContent value="upcoming" className="animate-fade-in space-y-6">
-              {loading ? (
-                <Card className="glass-card p-8 text-center">
-                  <p className="text-muted-foreground">Loading elections...</p>
-                </Card>
-              ) : upcomingElections.length > 0 ? (
-                upcomingElections.map((election) => (
-                  <VoteCard
-                    key={election.id}
-                    election={election}
-                    candidates={getElectionCandidates(election.id)}
-                    onVote={handleVote}
-                  />
-                ))
-              ) : (
-                <Card className="glass-card p-8 text-center">
-                  <p className="text-muted-foreground">There are no upcoming elections at this time.</p>
-                </Card>
-              )}
-            </TabsContent>
-            
-            <TabsContent value="completed" className="animate-fade-in space-y-6">
-              {loading ? (
-                <Card className="glass-card p-8 text-center">
-                  <p className="text-muted-foreground">Loading elections...</p>
-                </Card>
-              ) : pastElections.length > 0 || completedElections.length > 0 ? (
-                <>
-                  {pastElections.map((election) => (
-                    <Card key={election.id} className="glass-card p-6">
-                      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-4">
-                        <div>
-                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800 dark:bg-gray-800/50 dark:text-gray-300 capitalize mb-2">
-                            {election.status}
-                          </span>
-                          <h3 className="text-xl font-semibold">{election.title}</h3>
-                        </div>
-                      </div>
-                      
-                      <p className="text-muted-foreground mb-4">
-                        {election.description}
-                      </p>
-                      
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t border-border">
-                        <div className="flex items-center text-sm">
-                          <span className="text-muted-foreground mr-2">Voting Period:</span>
-                          <span>
-                            {new Date(election.startDate).toLocaleDateString('en-US', { 
-                              timeZone: 'Africa/Nairobi',
-                              year: 'numeric',
-                              month: 'long',
-                              day: 'numeric' 
-                            })} - {new Date(election.endDate).toLocaleDateString('en-US', { 
-                              timeZone: 'Africa/Nairobi',
-                              year: 'numeric',
-                              month: 'long',
-                              day: 'numeric' 
-                            })}
-                          </span>
-                        </div>
-                        <div className="flex items-center justify-start md:justify-end">
-                          {hasVoted(election.id) ? (
-                            <span className="bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300 px-3 py-1 rounded-full text-xs font-medium flex items-center">
-                              <CheckCircle className="h-3 w-3 mr-1.5" />
-                              Participated
-                            </span>
-                          ) : (
-                            <span className="bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-300 px-3 py-1 rounded-full text-xs font-medium">
-                              Did not participate
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    </Card>
-                  ))}
-                  
-                  {activeElections
-                    .filter(election => completedElections.includes(election.id))
-                    .map((election) => (
-                      <Card key={election.id} className="glass-card p-6">
-                        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-4">
-                          <div>
-                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300 capitalize mb-2">
-                              {election.status}
-                            </span>
-                            <h3 className="text-xl font-semibold">{election.title}</h3>
-                          </div>
-                        </div>
-                        
-                        <p className="text-muted-foreground mb-4">
-                          {election.description}
-                        </p>
-                        
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t border-border">
-                          <div className="flex items-center text-sm">
-                            <span className="text-muted-foreground mr-2">Voting Period:</span>
-                            <span>
-                              {new Date(election.startDate).toLocaleDateString('en-US', { 
-                                timeZone: 'Africa/Nairobi',
-                                year: 'numeric',
-                                month: 'long',
-                                day: 'numeric' 
-                              })} - {new Date(election.endDate).toLocaleDateString('en-US', { 
-                                timeZone: 'Africa/Nairobi',
-                                year: 'numeric',
-                                month: 'long',
-                                day: 'numeric' 
-                              })}
-                            </span>
-                          </div>
-                          <div className="flex items-center justify-start md:justify-end">
-                            <span className="bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300 px-3 py-1 rounded-full text-xs font-medium flex items-center">
-                              <CheckCircle className="h-3 w-3 mr-1.5" />
-                              Participated
-                            </span>
-                          </div>
-                        </div>
-                      </Card>
-                    ))}
-                </>
-              ) : (
-                <Card className="glass-card p-8 text-center">
-                  <p className="text-muted-foreground">You haven't participated in any elections yet.</p>
-                </Card>
-              )}
-            </TabsContent>
-          </Tabs>
-        </div>
-      </main>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+          <CardFooter>
+            <Skeleton className="h-10 w-32" />
+          </CardFooter>
+        </Card>
+      </div>
+    );
+  }
+
+  if (activeElections.length === 0) {
+    return (
+      <div className="container mx-auto px-4 py-8">
+        <Helmet>
+          <title>Vote | VoteX</title>
+        </Helmet>
+        <h1 className="text-3xl font-bold mb-6">Cast Your Vote</h1>
+        <Alert>
+          <AlertCircle className="h-4 w-4" />
+          <AlertTitle>No Active Elections</AlertTitle>
+          <AlertDescription>
+            There are no active elections at the moment. Please check back later.
+          </AlertDescription>
+        </Alert>
+        <Button 
+          onClick={() => navigate('/dashboard')} 
+          className="mt-4"
+        >
+          Return to Dashboard
+        </Button>
+      </div>
+    );
+  }
+
+  if (isSuccess) {
+    return (
+      <div className="container mx-auto px-4 py-8">
+        <Helmet>
+          <title>Vote Successful | VoteX</title>
+        </Helmet>
+        <h1 className="text-3xl font-bold mb-6">Vote Successful</h1>
+        <Card>
+          <CardContent className="pt-6 text-center">
+            <ThumbsUp className="h-16 w-16 mx-auto text-green-500 mb-4" />
+            <h2 className="text-2xl font-semibold">Thank You for Voting!</h2>
+            <p className="text-muted-foreground mt-2 mb-4">
+              Your vote has been securely recorded and encrypted.
+            </p>
+            <div className="flex justify-center space-x-4">
+              <Button onClick={() => navigate('/dashboard')}>
+                Return to Dashboard
+              </Button>
+              <Button variant="outline" onClick={() => navigate('/results')}>
+                View Results
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  return (
+    <div className="container mx-auto px-4 py-8">
+      <Helmet>
+        <title>Vote | VoteX</title>
+      </Helmet>
+      <h1 className="text-3xl font-bold mb-6">Cast Your Vote</h1>
       
-      <Footer />
+      {hasVoted && (
+        <Alert className="mb-6 bg-amber-50 border-amber-200 dark:bg-amber-900/20 dark:border-amber-900/30">
+          <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+          <AlertTitle>You've Already Voted</AlertTitle>
+          <AlertDescription>
+            You have already cast your vote in this election. Each voter is allowed only one vote per election.
+          </AlertDescription>
+        </Alert>
+      )}
+      
+      {activeElections.length > 1 && (
+        <Tabs defaultValue={activeElections[0].id.toString()} value={selectedElection?.toString()} onValueChange={handleElectionChange} className="mb-6">
+          <TabsList>
+            {activeElections.map((election) => (
+              <TabsTrigger key={election.id} value={election.id.toString()}>
+                {election.title}
+              </TabsTrigger>
+            ))}
+          </TabsList>
+        </Tabs>
+      )}
+      
+      <Card>
+        <CardHeader>
+          <CardTitle>
+            {selectedElection && activeElections.find(e => e.id === selectedElection)?.title}
+          </CardTitle>
+          <CardDescription>
+            {selectedElection && activeElections.find(e => e.id === selectedElection)?.description}
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <h3 className="text-lg font-medium mb-4">Select a Candidate</h3>
+          {candidates.length === 0 ? (
+            <p className="text-muted-foreground">No candidates available for this election.</p>
+          ) : (
+            <RadioGroup 
+              value={selectedCandidate?.toString()} 
+              onValueChange={value => setSelectedCandidate(parseInt(value))}
+              className="space-y-4"
+            >
+              {candidates.map((candidate) => (
+                <div key={candidate.id} className="flex items-start space-x-4 p-4 border rounded-lg hover:bg-gray-50 dark:hover:bg-gray-900/20">
+                  <RadioGroupItem 
+                    value={candidate.id.toString()} 
+                    id={`candidate-${candidate.id}`} 
+                    disabled={hasVoted}
+                  />
+                  <div className="grid gap-1.5">
+                    <Label 
+                      htmlFor={`candidate-${candidate.id}`} 
+                      className="text-lg font-medium cursor-pointer"
+                    >
+                      {candidate.name} 
+                      <span className="ml-2 text-sm font-normal text-muted-foreground">
+                        {candidate.party}
+                      </span>
+                    </Label>
+                    <p className="text-sm text-muted-foreground">
+                      {candidate.platform || candidate.bio || 'No candidate information available.'}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </RadioGroup>
+          )}
+        </CardContent>
+        <CardFooter>
+          <Button 
+            onClick={handleVote} 
+            disabled={!selectedCandidate || hasVoted || isSubmitting}
+            className="flex items-center"
+          >
+            {isSubmitting ? 'Submitting...' : 'Submit Vote'}
+            {!isSubmitting && <Check className="ml-2 h-4 w-4" />}
+          </Button>
+        </CardFooter>
+      </Card>
     </div>
   );
 };
