@@ -1,7 +1,11 @@
 
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Card } from '@/components/ui/card';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
+import io from 'socket.io-client';
+
+// Initialize socket connection
+const socket = io(import.meta.env.VITE_API_URL || 'http://localhost:4000');
 
 interface Candidate {
   id: string;
@@ -17,6 +21,7 @@ interface ResultsChartProps {
   candidates: Candidate[];
   totalVotes: number;
   chartType?: 'bar' | 'pie';
+  electionId?: number;
 }
 
 const CustomTooltip = ({ active, payload }: any) => {
@@ -41,14 +46,52 @@ const ResultsChart = ({
   description, 
   candidates, 
   totalVotes,
-  chartType = 'bar' 
+  chartType = 'bar',
+  electionId
 }: ResultsChartProps) => {
   
+  const [chartData, setChartData] = useState(candidates);
+  const [chartTotal, setChartTotal] = useState(totalVotes);
+  
+  useEffect(() => {
+    // Update chart data when props change
+    setChartData(candidates);
+    setChartTotal(totalVotes);
+    
+    // Listen for real-time vote updates
+    if (electionId) {
+      socket.on('vote-added', (vote) => {
+        if (vote.electionId === electionId) {
+          // Refresh data when a vote for this election is added
+          setChartData(prev => {
+            return prev.map(candidate => {
+              if (candidate.id === vote.candidateId.toString()) {
+                return {
+                  ...candidate,
+                  votes: candidate.votes + 1
+                };
+              }
+              return candidate;
+            });
+          });
+          setChartTotal(prev => prev + 1);
+        }
+      });
+    }
+    
+    return () => {
+      if (electionId) {
+        socket.off('vote-added');
+      }
+    };
+  }, [candidates, totalVotes, electionId]);
+  
   // Sort candidates by votes in descending order
-  const sortedCandidates = [...candidates].sort((a, b) => b.votes - a.votes);
+  const sortedCandidates = [...chartData].sort((a, b) => b.votes - a.votes);
   
   // Format percentage with 1 decimal place
   const formatPercentage = (value: number) => {
+    if (chartTotal === 0) return '0.0%';
     return `${(value * 100).toFixed(1)}%`;
   };
   
@@ -127,7 +170,7 @@ const ResultsChart = ({
                 <div className="flex items-center">
                   <span className="font-medium">{candidate.votes}</span>
                   <span className="text-xs ml-1 text-muted-foreground">
-                    ({formatPercentage(candidate.votes / totalVotes)})
+                    ({formatPercentage(candidate.votes / (chartTotal || 1))})
                   </span>
                 </div>
               </li>
@@ -136,7 +179,7 @@ const ResultsChart = ({
           
           <div className="mt-4 pt-3 border-t border-border flex justify-between items-center text-sm">
             <span className="text-muted-foreground">Total Votes:</span>
-            <span className="font-medium">{totalVotes}</span>
+            <span className="font-medium">{chartTotal}</span>
           </div>
         </div>
       </div>

@@ -1,40 +1,27 @@
+
 const express = require('express');
 const cors = require('cors');
 const mysql = require('mysql2/promise');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
-const crypto = require('crypto');
+const http = require('http');
+const { Server } = require('socket.io');
 require('dotenv').config();
 
 const app = express();
+const server = http.createServer(app);
+const io = new Server(server, {
+  cors: {
+    origin: '*',
+    methods: ['GET', 'POST', 'PUT', 'DELETE']
+  }
+});
+
 const PORT = process.env.PORT || 4000;
 
 // Middleware
 app.use(cors());
 app.use(express.json());
-
-// Encryption key (in a real app, store this securely)
-const ENCRYPTION_KEY = process.env.ENCRYPTION_KEY || 'your-encryption-key-min-32-chars-here!!';
-const IV_LENGTH = 16; // For AES, this is always 16
-
-// Encryption functions
-function encrypt(text) {
-  const iv = crypto.randomBytes(IV_LENGTH);
-  const cipher = crypto.createCipheriv('aes-256-cbc', Buffer.from(ENCRYPTION_KEY), iv);
-  let encrypted = cipher.update(text);
-  encrypted = Buffer.concat([encrypted, cipher.final()]);
-  return iv.toString('hex') + ':' + encrypted.toString('hex');
-}
-
-function decrypt(text) {
-  const textParts = text.split(':');
-  const iv = Buffer.from(textParts.shift(), 'hex');
-  const encryptedText = Buffer.from(textParts.join(':'), 'hex');
-  const decipher = crypto.createDecipheriv('aes-256-cbc', Buffer.from(ENCRYPTION_KEY), iv);
-  let decrypted = decipher.update(encryptedText);
-  decrypted = Buffer.concat([decrypted, decipher.final()]);
-  return decrypted.toString();
-}
 
 // Database connection pool
 const pool = mysql.createPool({
@@ -118,6 +105,14 @@ app.post('/api/users/register', async (req, res) => {
       { expiresIn: '7d' }
     );
     
+    // Emit event for real-time updates
+    io.emit('user-added', {
+      id: result.insertId,
+      name,
+      email,
+      role
+    });
+    
     res.status(201).json({
       success: true,
       message: 'User registered successfully',
@@ -188,7 +183,7 @@ app.post('/api/users/login', async (req, res) => {
 });
 
 // Get Users (Admin only)
-app.get('/api/users', authenticateToken, authorizeAdmin, async (req, res) => {
+app.get('/api/users', authenticateToken, async (req, res) => {
   try {
     const { role } = req.query;
     
@@ -210,7 +205,7 @@ app.get('/api/users', authenticateToken, authorizeAdmin, async (req, res) => {
 });
 
 // Get User by ID (Admin only)
-app.get('/api/users/:id', authenticateToken, authorizeAdmin, async (req, res) => {
+app.get('/api/users/:id', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
     
@@ -250,6 +245,16 @@ app.put('/api/users/:id', authenticateToken, authorizeAdmin, async (req, res) =>
       return res.status(404).json({ success: false, message: 'User not found' });
     }
     
+    // Emit event for real-time updates
+    io.emit('user-updated', {
+      id: parseInt(id),
+      name,
+      email,
+      role,
+      bio,
+      profile_image
+    });
+    
     res.json({ success: true, message: 'User updated successfully' });
   } catch (error) {
     console.error('Error updating user:', error);
@@ -267,6 +272,9 @@ app.delete('/api/users/:id', authenticateToken, authorizeAdmin, async (req, res)
     if (result.affectedRows === 0) {
       return res.status(404).json({ success: false, message: 'User not found' });
     }
+    
+    // Emit event for real-time updates
+    io.emit('user-deleted', { id: parseInt(id) });
     
     res.json({ success: true, message: 'User deleted successfully' });
   } catch (error) {
@@ -295,7 +303,7 @@ app.get('/api/elections', async (req, res) => {
 });
 
 // Create Election
-app.post('/api/elections', async (req, res) => {
+app.post('/api/elections', authenticateToken, authorizeAdmin, async (req, res) => {
   try {
     const { title, description, startDate, endDate, status, createdBy } = req.body;
     
@@ -308,6 +316,16 @@ app.post('/api/elections', async (req, res) => {
       'INSERT INTO elections (title, description, start_date, end_date, status, created_by, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, NOW(), NOW())',
       [title, description, startDate, endDate, status, createdBy]
     );
+    
+    // Emit event for real-time updates
+    io.emit('election-added', {
+      id: result.insertId,
+      title,
+      description,
+      start_date: startDate,
+      end_date: endDate,
+      status
+    });
     
     res.status(201).json({
       success: true,
@@ -341,6 +359,16 @@ app.put('/api/elections/:id', authenticateToken, authorizeAdmin, async (req, res
       return res.status(404).json({ success: false, message: 'Election not found' });
     }
     
+    // Emit event for real-time updates
+    io.emit('election-updated', {
+      id: parseInt(id),
+      title,
+      description,
+      start_date: startDate,
+      end_date: endDate,
+      status
+    });
+    
     res.json({ success: true, message: 'Election updated successfully' });
   } catch (error) {
     console.error('Error updating election:', error);
@@ -358,6 +386,9 @@ app.delete('/api/elections/:id', authenticateToken, authorizeAdmin, async (req, 
     if (result.affectedRows === 0) {
       return res.status(404).json({ success: false, message: 'Election not found' });
     }
+    
+    // Emit event for real-time updates
+    io.emit('election-deleted', { id: parseInt(id) });
     
     res.json({ success: true, message: 'Election deleted successfully' });
   } catch (error) {
@@ -420,6 +451,15 @@ app.post('/api/candidates', authenticateToken, authorizeAdmin, async (req, res) 
       [userId, electionId, party, platform]
     );
     
+    // Emit event for real-time updates
+    io.emit('candidate-added', {
+      id: result.insertId,
+      userId,
+      electionId,
+      party,
+      platform
+    });
+    
     res.status(201).json({
       success: true,
       message: 'Candidate created successfully',
@@ -447,6 +487,14 @@ app.put('/api/candidates/:id', authenticateToken, authorizeAdmin, async (req, re
       return res.status(404).json({ success: false, message: 'Candidate not found' });
     }
     
+    // Emit event for real-time updates
+    io.emit('candidate-updated', {
+      id: parseInt(id),
+      party,
+      platform,
+      approved
+    });
+    
     res.json({ success: true, message: 'Candidate updated successfully' });
   } catch (error) {
     console.error('Error updating candidate:', error);
@@ -465,6 +513,9 @@ app.delete('/api/candidates/:id', authenticateToken, authorizeAdmin, async (req,
       return res.status(404).json({ success: false, message: 'Candidate not found' });
     }
     
+    // Emit event for real-time updates
+    io.emit('candidate-deleted', { id: parseInt(id) });
+    
     res.json({ success: true, message: 'Candidate deleted successfully' });
   } catch (error) {
     console.error('Error deleting candidate:', error);
@@ -472,7 +523,7 @@ app.delete('/api/candidates/:id', authenticateToken, authorizeAdmin, async (req,
   }
 });
 
-// Cast Vote with encryption
+// Cast Vote without encryption
 app.post('/api/votes', authenticateToken, async (req, res) => {
   try {
     const { voterId, candidateId, electionId } = req.body;
@@ -497,14 +548,19 @@ app.post('/api/votes', authenticateToken, async (req, res) => {
       return res.status(409).json({ success: false, message: 'You have already voted in this election' });
     }
     
-    // Encrypt the candidateId before storing
-    const encryptedCandidateId = encrypt(candidateId.toString());
-    
-    // Record the vote with encryption
+    // Record the vote without encryption
     const [result] = await pool.query(
       'INSERT INTO votes (voter_id, candidate_id, election_id, timestamp) VALUES (?, ?, ?, NOW())',
-      [voterId, encryptedCandidateId, electionId]
+      [voterId, candidateId, electionId]
     );
+    
+    // Emit event for real-time updates
+    io.emit('vote-added', {
+      id: result.insertId,
+      voterId,
+      candidateId,
+      electionId
+    });
     
     res.status(201).json({
       success: true,
@@ -518,32 +574,21 @@ app.post('/api/votes', authenticateToken, async (req, res) => {
   }
 });
 
-// Get Election Results with decryption
+// Get Election Results without decryption
 app.get('/api/results/:electionId', async (req, res) => {
   try {
     const { electionId } = req.params;
     
     // Get all votes for this election
-    const [encryptedVotes] = await pool.query(
+    const [votes] = await pool.query(
       'SELECT v.id, v.voter_id, v.candidate_id, v.election_id FROM votes v WHERE v.election_id = ?',
       [electionId]
     );
     
-    // Decrypt the votes and count them
-    const decryptedVotes = encryptedVotes.map(vote => {
-      try {
-        const decryptedId = decrypt(vote.candidate_id);
-        return { ...vote, candidateId: parseInt(decryptedId) };
-      } catch (error) {
-        console.error('Error decrypting vote:', error);
-        return null;
-      }
-    }).filter(vote => vote !== null);
-    
     // Count votes by candidate
     const voteCounts = {};
-    decryptedVotes.forEach(vote => {
-      const id = vote.candidateId;
+    votes.forEach(vote => {
+      const id = vote.candidate_id;
       voteCounts[id] = (voteCounts[id] || 0) + 1;
     });
     
@@ -575,7 +620,17 @@ app.get('/api/results/:electionId', async (req, res) => {
   }
 });
 
-// Start server
-app.listen(PORT, () => {
+// Socket.io connections
+io.on('connection', (socket) => {
+  console.log('A client connected');
+  
+  socket.on('disconnect', () => {
+    console.log('A client disconnected');
+  });
+});
+
+// Start server with Socket.io
+server.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
+

@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
@@ -11,6 +12,10 @@ import { AlertCircle, Check, ThumbsUp } from 'lucide-react';
 import { sqlService } from '@/services/sql';
 import { Skeleton } from '@/components/ui/skeleton';
 import { toast } from 'sonner';
+import io from 'socket.io-client';
+
+// Initialize socket connection
+const socket = io(import.meta.env.VITE_API_URL || 'http://localhost:4000');
 
 interface Candidate {
   id: number;
@@ -50,7 +55,58 @@ const Vote = () => {
     }
 
     fetchElectionsAndVotes();
-  }, [navigate, currentUser]);
+
+    // Socket event listeners for real-time updates
+    socket.on('election-updated', (updatedElection) => {
+      setActiveElections(prev => 
+        prev.map(election => 
+          election.id === updatedElection.id ? {...election, ...updatedElection} : election
+        )
+      );
+    });
+
+    socket.on('election-deleted', (deletedElection) => {
+      setActiveElections(prev => 
+        prev.filter(election => election.id !== deletedElection.id)
+      );
+    });
+
+    socket.on('candidate-added', () => {
+      if (selectedElection) {
+        fetchCandidates(selectedElection);
+      }
+    });
+
+    socket.on('candidate-updated', (updatedCandidate) => {
+      setCandidates(prev => 
+        prev.map(candidate => 
+          candidate.id === updatedCandidate.id ? {...candidate, ...updatedCandidate} : candidate
+        )
+      );
+    });
+
+    socket.on('candidate-deleted', (deletedCandidate) => {
+      setCandidates(prev => 
+        prev.filter(candidate => candidate.id !== deletedCandidate.id)
+      );
+    });
+
+    socket.on('vote-added', () => {
+      if (selectedElection) {
+        fetchUserVotes();
+      }
+    });
+
+    return () => {
+      // Clean up socket listeners
+      socket.off('election-updated');
+      socket.off('election-deleted');
+      socket.off('candidate-added');
+      socket.off('candidate-updated');
+      socket.off('candidate-deleted');
+      socket.off('vote-added');
+    };
+  }, [navigate, currentUser, selectedElection]);
 
   const fetchElectionsAndVotes = async () => {
     setIsLoading(true);
@@ -68,13 +124,8 @@ const Vote = () => {
       
       if (active.length > 0) {
         setSelectedElection(active[0].id);
-        
-        const candidatesData = await sqlService.getCandidates(active[0].id);
-        setCandidates(candidatesData);
-        
-        const votes = await sqlService.getUserVotes();
-        const hasAlreadyVoted = votes.some((vote: any) => vote.election_id === active[0].id);
-        setHasVoted(hasAlreadyVoted);
+        await fetchCandidates(active[0].id);
+        await fetchUserVotes();
       }
     } catch (error) {
       console.error('Error fetching elections data:', error);
@@ -84,21 +135,39 @@ const Vote = () => {
     }
   };
 
+  const fetchCandidates = async (electionId: number) => {
+    try {
+      const candidatesData = await sqlService.getCandidates(electionId);
+      setCandidates(candidatesData);
+    } catch (error) {
+      console.error('Error fetching candidates:', error);
+      toast.error('Failed to load candidates');
+    }
+  };
+
+  const fetchUserVotes = async () => {
+    try {
+      const votes = await sqlService.getUserVotes();
+      const hasAlreadyVoted = votes.some((vote: any) => 
+        vote.election_id === selectedElection
+      );
+      setHasVoted(hasAlreadyVoted);
+    } catch (error) {
+      console.error('Error fetching user votes:', error);
+    }
+  };
+
   const handleElectionChange = async (electionId: string) => {
     const electionIdNum = parseInt(electionId);
     setSelectedElection(electionIdNum);
     setSelectedCandidate(null);
     
     try {
-      const candidatesData = await sqlService.getCandidates(electionIdNum);
-      setCandidates(candidatesData);
-      
-      const votes = await sqlService.getUserVotes();
-      const hasAlreadyVoted = votes.some((vote: any) => vote.election_id === electionIdNum);
-      setHasVoted(hasAlreadyVoted);
+      await fetchCandidates(electionIdNum);
+      await fetchUserVotes();
     } catch (error) {
-      console.error('Error fetching candidates:', error);
-      toast.error('Failed to load candidates');
+      console.error('Error changing election:', error);
+      toast.error('Failed to load election data');
     }
   };
 

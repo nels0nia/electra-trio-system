@@ -1,11 +1,9 @@
-
 import React, { useState } from 'react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Vote, ChevronRight, ClipboardCheck, Check, Lock } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import CandidateProfile from './CandidateProfile';
-import { encryptVote } from '@/utils/cryptoUtils';
 
 interface Candidate {
   id: string;
@@ -27,7 +25,7 @@ interface VoteCardProps {
     status: 'upcoming' | 'active' | 'ended';
   };
   candidates: Candidate[];
-  onVote: (electionId: string, candidateId: string, encryptedVote: string) => void;
+  onVote: (electionId: string, candidateId: string) => void;
 }
 
 const VoteCard = ({ election, candidates, onVote }: VoteCardProps) => {
@@ -40,18 +38,8 @@ const VoteCard = ({ election, candidates, onVote }: VoteCardProps) => {
   
   const handleVoteSubmit = () => {
     if (selectedCandidate) {
-      // Encrypt the vote before sending to the server
-      const voteData = {
-        electionId: election.id,
-        candidateId: selectedCandidate,
-        timestamp: new Date().toISOString()
-      };
-      
-      // Generate encrypted vote
-      const encryptedVote = encryptVote(voteData);
-      
-      // Pass both the IDs and the encrypted vote to the parent component
-      onVote(election.id, selectedCandidate, encryptedVote);
+      // Pass the IDs to the parent component
+      onVote(election.id, selectedCandidate);
       setStep('success');
     }
   };
@@ -232,19 +220,6 @@ const VoteCard = ({ election, candidates, onVote }: VoteCardProps) => {
                       </div>
                     </div>
                   ))}
-              </div>
-            </div>
-            
-            <div className="bg-blue-50 dark:bg-blue-950/20 p-4 rounded-md mb-6">
-              <div className="flex items-start">
-                <Lock className="h-5 w-5 text-blue-500 mt-0.5 mr-3 flex-shrink-0" />
-                <div>
-                  <h4 className="text-sm font-medium text-blue-700 dark:text-blue-300">Secure Voting</h4>
-                  <p className="text-xs text-blue-600/80 dark:text-blue-400/80 mt-1">
-                    Your vote will be encrypted before being sent to our servers. This ensures 
-                    your vote remains private and tamper-proof throughout the election process.
-                  </p>
-                </div>
               </div>
             </div>
             
